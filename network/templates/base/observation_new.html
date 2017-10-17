@@ -3,117 +3,167 @@
 {% load staticfiles %}
 {% load tags %}
 
-{% block title %}New Observation{% endblock %}
+{% block title %} - New Observation{% endblock %}
 
 {% block css %}
-<link href="{% static 'css/bootstrap-datetimepicker.min.css' %}" rel="stylesheet">
+  <link href="{% static 'lib/eonasdan-bootstrap-datetimepicker/build/css/bootstrap-datetimepicker.min.css' %}" rel="stylesheet">
 {% endblock css %}
 
 {% block content %}
 
-<div class="row">
-  <div class="col-md-12">
-    <h2>New Observation</h2>
+  <div class="row">
+    <div class="col-md-12">
+      <h2>New Observation</h2>
+      <div class="timezone text-muted">
+        <span class="glyphicon glyphicon-time" aria-hidden="true"></span>
+        Timeframes are in <a href="#" data-toggle="modal" data-target="#UTCModal">UTC</a>
+      </div>
+    </div>
   </div>
-</div>
 
-<form class="form-horizontal" role="form" action="{% url 'base:observation_new' %}" method="post">{% csrf_token %}
-<div class="row">
-  <div class="col-md-6">
-    <div class="form-group">
-      <label class="col-sm-3 control-label">Satellite</label>
-      <div class="col-sm-9">
-        <select id="satellite-selection" class="form-control" name="satellite">
-          <option value="" disabled selected>Select a satellite</option>
-          {% for satellite in satellites %}
-            <option data-norad="{{ satellite.norad_cat_id }}" value="{{ satellite.norad_cat_id }}">
-              {{ satellite.norad_cat_id }} - {{ satellite.name }}
-            </option>
-          {% endfor %}
-        </select>
+  <form class="form-horizontal" role="form" action="{% url 'base:observation_new' %}"
+        method="post" data-obs-filter="{{ obs_filter.exists|lower }}" data-obs-filter-station="{{ obs_filter.ground_station }}"
+        data-obs-filter-dates="{{ obs_filter.start_date }}" id="form-obs">{% csrf_token %}
+    <div class="row">
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="col-sm-3 control-label">Satellite</label>
+          <div class="col-sm-9">
+            {% if obs_filter.norad %}
+              {% for satellite in satellites %}
+                {% ifequal satellite.norad_cat_id obs_filter.norad %}
+                  <input type="text" class="form-control" name="satellite-name"
+                         readonly value="{{ satellite.norad_cat_id }} - {{ satellite.name }}">
+                {% endifequal %}
+              {% endfor %}
+              <input type="hidden" name="satellite" value="{{ obs_filter.norad }}">
+            {% else %}
+              <select id="satellite-selection" class="form-control" name="satellite" autocomplete="off">
+                <option value="" selected>Select a satellite</option>
+                {% for satellite in satellites %}
+                  <option data-norad="{{ satellite.norad_cat_id }}" value="{{ satellite.norad_cat_id }}">
+                    {{ satellite.norad_cat_id }} - {{ satellite.name }}
+                  </option>
+                {% endfor %}
+              </select>
+            {% endif %}
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="col-sm-3 control-label">Transmitter</label>
+          <div class="col-sm-9">
+            <select id="transmitter-selection" class="form-control" disabled name="transmitter" autocomplete="off">
+              <option id="no-transmitter" value="" disabled selected>No transmitter available</option>
+              {% for transmitter in transmitters %}
+                <option data-satellite="{{ transmitter.satellite.norad_cat_id }}"
+                        value="{{ transmitter.id }}" >
+                  {{ transmitter.description }} - {{ transmitter.downlink_low|frq }} - {{ transmitter.mode|default:"" }}
+                </option>
+              {% endfor %}
+            </select>
+            {% for satellite in satellites %}
+              <small class="tle" data-norad="{{ satellite.norad_cat_id }}">
+                {% if satellite.tle_no %}
+                  Using TLE {{ satellite.tle_no }} issued
+                  {{ satellite.tle_epoch|timesince }} ago
+                {% endif %}
+              </small>
+            {% endfor %}
+          </div>
+        </div>
       </div>
-    </div>
-    <div class="form-group">
-      <label class="col-sm-3 control-label">Transponder</label>
-      <div class="col-sm-9">
-        <select id="transponder-selection" class="form-control" disabled name="transponder" >
-          <option id="no-transponder" value="" disabled selected>No transponder available</option>
-          {% for transponder in transponders %}
-            <option data-satellite="{{ transponder.satellite.norad_cat_id }}"
-                    value="{{ transponder.id }}">
-              {{ transponder.description }} - {% frq transponder.downlink_low %} - {{ transponder.mode }}
-            </option>
-          {% endfor %}
-        </select>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-6">
-    <div class="form-group">
-      <label class="col-sm-3 control-label">Start Time</label>
-      <div class="col-sm-9">
-        <div class='input-group date' id='datetimepicker-start'>
-          <input type="text"
-                 class="form-control"
-                 name="start-time"
-                 data-date-format="YYYY-MM-DD HH:mm" />
-          <span class="input-group-addon"><span class="glyphicon glyphicon-calendar"></span>
-          </span>
+      <div class="col-md-6">
+        <div class="form-group">
+          <label class="col-sm-3 control-label">Start Time</label>
+          <div class="col-sm-9">
+            <div class='input-group date' id="datetimepicker-start"
+                 data-date-minstart="{{ date_min_start }}">
+              {% if obs_filter.start_date %}
+                <input type="text" class="form-control" name="start-time"
+                       value="{{ obs_filter.start_date}}" readonly>
+              {% else %}
+                <input type="text"
+                       class="form-control"
+                       name="start-time"
+                       data-date-format="YYYY-MM-DD HH:mm"
+                       autocomplete="off">
+              {% endif %}
+              <span class="input-group-addon">
+                <span class="glyphicon glyphicon-calendar"></span>
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="col-sm-3 control-label">End Time</label>
+          <div class="col-sm-9">
+            <div class='input-group date' id="datetimepicker-end"
+                 data-date-maxrange="{{ date_max_range }}"
+                 data-date-minend="{{ date_min_end }}">
+              {% if obs_filter.end_date %}
+                <input type="text" class="form-control" name="end-time"
+                       value="{{ obs_filter.end_date}}" readonly>
+              {% else %}
+                <input type="text"
+                       class="form-control"
+                       name="end-time"
+                       data-date-format="YYYY-MM-DD HH:mm"
+                       autocomplete="off">
+              {% endif %}
+              <span class="input-group-addon">
+                <span class="glyphicon glyphicon-calendar"></span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
-    <div class="form-group">
-      <label class="col-sm-3 control-label">End Time</label>
-      <div class="col-sm-9">
-        <div class='input-group date' id='datetimepicker-end'>
-          <input type="text"
-                 class="form-control"
-                 name="end-time"
-                 data-date-format="YYYY-MM-DD HH:mm" />
-          <span class="input-group-addon"><span class="glyphicon glyphicon-calendar"></span>
-          </span>
-        </div>
+
+    {% if obs_filter.ground_station %}
+      <input type="hidden" name="ground_station" value="{{ obs_filter.ground_station }}">
+    {% endif %}
+
+    <div class="row">
+      <div class="col-md-12">
+        <button type="button" id="calculate-observation" class="btn btn-primary pull-right">
+          Calculate
+        </button>
       </div>
     </div>
-  </div>
-</div>
 
-<div class="row">
-  <div class="col-md-12">
-    <button type="button" id="calculate-observation" class="btn btn-primary pull-right">
-      Calculate Observation
-    </button>
-  </div>
-</div>
-
-<div class="row calculation-result">
-  <div class="col-md-12">
-    <h3>Calculated Timeline</h3>
-    <div id="timeline"></div>
-    <div id="hoverRes">
-      <div class="coloredDiv"></div>
-      <div id="name"></div>
-      <div id="scrolled_date"></div>
+    <div class="row calculation-result">
+      <div class="col-md-12">
+        <h3>Calculated Timeline</h3>
+        <div id="loading" class="notice">Calculating</div>
+        <div id="timeline"></div>
+        <div id="hoverRes">
+          <div class="coloredDiv"></div>
+          <div id="name"></div>
+          <div id="scrolled_date"></div>
+        </div>
+        <div id="windows-data"></div>
+      </div>
     </div>
-    <div id="windows-data"></div>
-  </div>
-</div>
 
-<div class="row calculation-result">
-  <div class="col-md-12">
-    <button type="submit" id="calculate-observation" class="btn btn-success pull-right">
-      Schedule Observation
-    </button>
-  </div>
-</div>
-</form>
+    <div class="row calculation-result">
+      <div class="col-md-12">
+        <button type="submit" id="schedule-observation" class="btn btn-success pull-right" disabled="True">
+          Schedule
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <!-- UTC Modal -->
+  {% include 'includes/utc.html' %}
 
 {% endblock content %}
 
 {% block javascript %}
-<script src="{% static 'js/d3.v3.min.js' %}"></script>
-<script src="{% static 'js/d3-timeline.js' %}"></script>
-<script src="{% static 'js/moment.min.js' %}"></script>
-<script src="{% static 'js/bootstrap-datetimepicker.min.js' %}"></script>
-<script src="{% static 'js/observation_new.js' %}"></script>
+  <script src="{% static 'lib/d3/d3.min.js' %}"></script>
+  <script src="{% static 'lib/d3-timeline/src/d3-timeline.js' %}"></script>
+  <script src="{% static 'lib/moment/min/moment.min.js' %}"></script>
+  <script src="{% static 'lib/eonasdan-bootstrap-datetimepicker/build/js/bootstrap-datetimepicker.min.js' %}"></script>
+  <script src="{% static 'js/utc.js' %}"></script>
+  <script src="{% static 'js/observation_new.js' %}"></script>
 {% endblock javascript %}

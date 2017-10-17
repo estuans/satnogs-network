@@ -1,9 +1,7 @@
 from django.core.urlresolvers import reverse
 from django.shortcuts import render
-from django.views.generic import DetailView
 from django.views.generic import RedirectView
 from django.views.generic import UpdateView
-from django.views.generic import ListView
 
 from braces.views import LoginRequiredMixin
 
@@ -12,13 +10,7 @@ from rest_framework.authtoken.models import Token
 from network.users.forms import UserForm
 from network.users.models import User
 from network.base.forms import StationForm
-from network.base.models import Station, Observation, Antenna
-
-
-class UserDetailView(LoginRequiredMixin, DetailView):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
+from network.base.models import Station, Observation, Antenna, Rig
 
 
 class UserRedirectView(LoginRequiredMixin, RedirectView):
@@ -43,12 +35,6 @@ class UserUpdateView(LoginRequiredMixin, UpdateView):
         return User.objects.get(username=self.request.user.username)
 
 
-class UserListView(LoginRequiredMixin, ListView):
-    model = User
-    slug_field = "username"
-    slug_url_kwarg = "username"
-
-
 def view_user(request, username):
     """View for user page."""
     user = User.objects.get(username=username)
@@ -60,6 +46,7 @@ def view_user(request, username):
         token = Token.objects.create(user=user)
     form = StationForm()
     antennas = Antenna.objects.all()
+    rigs = Rig.objects.all()
 
     return render(request, 'users/user_detail.html',
                   {'user': user,
@@ -67,4 +54,5 @@ def view_user(request, username):
                    'stations': stations,
                    'token': token,
                    'form': form,
-                   'antennas': antennas})
+                   'antennas': antennas,
+                   'rigs': rigs})

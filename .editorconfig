@@ -16,6 +16,10 @@ indent_size = 4
 indent_style = space
 indent_size = 2
 
-[*.{js,html}]
+[*.{html}]
 indent_style = space
 indent_size = 2
+
+[*.{css,js}]
+indent_style = space
+indent_size = 4

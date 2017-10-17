@@ -1,63 +1,82 @@
 {% extends "base.html" %}
 {% load tags %}
+{% load staticfiles %}
 
-{% block title %}Ground Stations{% endblock %}
+{% block title %} - Ground Stations{% endblock %}
 
 {% block content %}
-<h1>
-  Ground Stations
-  {% if user.is_authenticated %}
-    <button class="btn btn-primary pull-right" data-toggle="modal" data-target="#StationModal">New Ground Station</button>
-  {% endif %}
-</h1>
+  <h1>
+    Ground Stations
+    {% if user.is_authenticated %}
+      <button class="btn btn-primary pull-right" data-toggle="modal" data-target="#StationModal">New Ground Station</button>
+    {% endif %}
+  </h1>
 
-<div class="row">
-  <div class="col-md-12">
-    <table class="table table-hover">
-      <thead>
-        <th>ID</th>
-        <th>Name</th>
-        <th>Location</th>
-        <th>Altitude</th>
-        <th>Antenna</th>
-        <th>Owner</th>
-      </thead>
-      <tbody>
-        {% for station in stations.all %}
-          <tr>
-            <td>
-              <a href="{% url 'base:station_view' id=station.id %}">
-                <span class="label label-default">
-                  {{ station.id }}
-                </span>
-              </a>
-            </td>
-            <td>{{ station.name }}</td>
-            {% if station.location %}
-              <td title="{{ station.lat|floatformat:-3 }}, {{ station.lng|floatformat:-3 }}">
-                {{ station.location }}
+  <div class="row">
+    <div class="col-md-12">
+      <table class="table table-hover">
+        <thead>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Location</th>
+          <th>Altitude</th>
+          <th>Antennas</th>
+          <th>Owner</th>
+        </thead>
+        <tbody>
+          {% for station in stations.all %}
+            <tr>
+              <td>
+                <a href="{% url 'base:station_view' id=station.id %}">
+                  <span class="label
+                               {% if station.online %}
+                                 label-success
+                               {% else %}
+                                 label-danger
+                               {% endif %}">
+                    {{ station.id }}
+                  </span>
+                </a>
               </td>
-            {% else %}
-              <td>{{ station.lat|floatformat:-3 }}, {{ station.lng|floatformat:-3 }}</td>
-            {% endif %}
-            <td>{{ station.alt}} m</td>
-            <td>
-              {% for antenna in station.antenna.all %}
-                {{ antenna.antenna_type}} on {{ antenna.frequency }} ({{ antenna.band}})<br>
-              {% endfor %}
-            </td>
-            <td>
-              <a href="{% url 'users:view_user' username=station.owner.username %}">
-                {{ station.owner.get_full_name }}
-              </a>
-            </td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+              <td>
+                <a href="{% url 'base:station_view' id=station.id %}">
+                  {{ station.name }}
+                </a>
+              </td>
+              {% if station.location %}
+                <td title="{{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°, {{ station.qthlocator }}">
+                  {{ station.location }}
+                </td>
+              {% else %}
+                <td>
+                  {{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°
+                  {% if station.qthlocator %}
+                    - {{ station.qthlocator }}
+                  {% endif %}
+                </td>
+              {% endif %}
+              <td>{{ station.alt}} m</td>
+              <td>
+                {% for antenna in station.antenna.all %}
+                  {{ antenna.band}} {{ antenna.get_antenna_type_display }} | {{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}<br>
+                {% endfor %}
+              </td>
+              <td>
+                <a href="{% url 'users:view_user' username=station.owner.username %}">
+                  {{ station.owner.displayname }}
+                </a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</div>
 
-<!-- Station Modal -->
-{% include 'includes/station_edit.html' %}
+  <!-- Station Modal -->
+  {% include 'includes/station_edit.html' %}
 {% endblock content %}
+
+{% block javascript %}
+  <script src="{% static 'js/gridsquare.js' %}"></script>
+{% endblock javascript %}

@@ -3,114 +3,276 @@
 
 {% load staticfiles %}
 
-{% block title %}Observation {{ observation.id }}{% endblock %}
+{% block title %} - Observation {{ observation.id }}{% endblock %}
 
 {% block content %}
-<h2 id="observation-info"
-    data-start="{{ observation.start|date:"U"}}"
-    data-end="{{ observation.end|date:"U"}}">
-  Observation #{{ observation.id }}
-</h2>
-
-<div class="row">
-  <div class="col-md-12">
-    <table class="table table-hover">
-      <thead>
-        <th>Satellite</th>
-        <th>Frequency</th>
-        <th>Encoding</th>
-        <th>Timeframe</th>
-        <th>Observer</th>
-      </thead>
-      <tbody>
-          <tr>
-            <td>{{ observation.satellite.norad_cat_id }} - {{ observation.satellite.name }}</td>
-            <td>{% frq observation.transponder.downlink_low %}</td>
-            <td>{{ observation.transponder.mode }}</td>
-            <td>{{ observation.start|date:"Y-m-d H:i:s" }}</br>{{ observation.end|date:"Y-m-d H:i:s" }}</td>
-            <td>
-              <a href="{% url 'users:view_user' username=observation.author.username %}">
-                {{ observation.author.get_full_name }}
-              </a>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-{% if not observation.data_set.all %}
   <div class="row">
-    <div class="col-md-12">
-      <p class="notice">
-        No data associated with this observation.
-      </p>
+    <div class="col-md-6">
+      <h2 id="observation-info"
+          data-start="{{ observation.start|date:"U"}}"
+          data-end="{{ observation.end|date:"U"}}">
+        Observation #{{ observation.id }}
+      </h2>
+      <div class="timezone text-muted">
+        <span class="glyphicon glyphicon-time" aria-hidden="true"></span>
+        Timeframes are in <a href="#" data-toggle="modal" data-target="#UTCModal">UTC</a>
+      </div>
+    </div>
+    <div class="col-md-6 text-right">
+      <h2>
+        {% if discuss_slug %}
+          <a id="obs-discuss"
+             data-slug="{{ discuss_slug }}"
+             href="{% if has_comments %}{{ discuss_slug }}{% else %}{{ discuss_url }}{% endif %}"
+             class="btn btn-primary" target="_blank">
+            <span class="glyphicon glyphicon-comment" aria-hidden="true"></span>
+            Discuss
+          </a>
+        {% endif %}
+        {% if observation.is_past %}
+          {% if not observation.is_vetted and is_vetting_user %}
+            <a href="{% url 'base:observation_verify' id=observation.id %}">
+              <button id="verify-data" type="button" class="btn btn-default">
+                <span class="glyphicon glyphicon-thumbs-up" aria-hidden="true"></span> Good
+              </button>
+            </a>
+            <a href="{% url 'base:observation_mark_bad' id=observation.id %}">
+              <button id="bad-data" type="button" class="btn btn-default">
+                <span class="glyphicon glyphicon-thumbs-down" aria-hidden="true"></span> Bad
+              </button>
+            </a>
+          {% endif %}
+        {% endif %}
+        {% if is_deletable %}
+          <a href="{% url 'base:observation_delete' id=observation.id %}" id="obs-delete" class="btn btn-danger">
+            <span class="glyphicon glyphicon-trash" aria-hidden="true" title="Delete Observation"></span>
+          </a>
+        {% endif %}
+      </h2>
     </div>
   </div>
-{% else %}
+
   <div class="row">
-    <div class="col-md-12">
-      <h3>Timeline</h3>
-      <div id="timeline"></div>
-      <div id="hoverRes">
-        <div class="coloredDiv"></div>
-        <div id="name"></div>
-        <div id="scrolled_date"></div>
+    <div class="col-md-4 front-border">
+      <div class="front-line">
+        <span class="label label-default">Satellite</span>
+        <span class="front-data">
+          <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ observation.satellite.norad_cat_id }}">
+            {{ observation.satellite.norad_cat_id }}  - {{ observation.satellite.name }}
+          </a>
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Station</span>
+        <span class="front-data">
+          <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
+            {{ observation.ground_station.name }}
+          </a>
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Observer</span>
+        <span class="front-data">
+          <a href="{% url 'users:view_user' username=observation.author.username %}">
+            {{ observation.author.displayname }}
+          </a>
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Status</span>
+        <span class="front-data">
+          {% if observation.is_verified %}
+            <span class="label label-xs label-success" aria-hidden="true"
+                  data-toggle="tooltip" data-placement="right"
+                  title="Verified good on {{ observation.vetted_datetime|date:"Y-m-d H:i:s" }} by {{ observation.vetted_user.displayname }}">Verified</span>
+          {% elif observation.is_no_data %}
+            <span class="label label-xs label-danger" aria-hidden="true"
+                  data-toggle="tooltip" data-placement="right"
+                  title="Verified bad on {{ observation.vetted_datetime|date:"Y-m-d H:i:s" }} by {{ observation.vetted_user.displayname }}">Bad</span>
+          {% elif observation.is_future %}
+            <span class="label label-xs label-info" aria-hidden="true"
+                  data-toggle="tooltip" data-placement="right"
+                  title="This observation is in the future">Pending</span>
+          {% else %}
+            <span class="label label-xs label-warning" aria-hidden="true"
+                  data-toggle="tooltip" data-placement="right"
+                  title="This observation needs vetting">Unvetted</span>
+          {% endif %}
+        </span>
+      </div>
+    </div>
+    <div class="col-md-4 front-border">
+      <div class="front-line">
+        <span class="label label-default">Frequency</span>
+        <span class="front-data">
+          {{ observation.transmitter.downlink_low|frq }}
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Encoding</span>
+        <span class="front-data">
+          {{ observation.transmitter.mode|default:"-" }}
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Timeframe</span>
+        <span class="front-data">
+          {{ observation.start|date:"Y-m-d H:i:s" }}<br>{{ observation.end|date:"Y-m-d H:i:s" }}
+        </span>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="front-line">
+        <span class="label label-default">Rise</span>
+        <span class="front-data">
+          {{ observation.rise_azimuth }}°
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Max</span>
+        <span class="front-data">
+          {{ observation.max_altitude }}°
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Set</span>
+        <span class="front-data">
+          {{ observation.set_azimuth }}°
+        </span>
       </div>
     </div>
   </div>
 
+  <hr>
+
   <div class="row">
-    <div class="col-md-12">
-      <h3>Data</h3>
-      {% for data in data %}
-        <div class="panel panel-default observation-data"
-             data-id="{{ data.id }}"
-             data-payload="{{ MEDIA_URL }}{{ data.payload }}"
-             data-start="{{ data.start|date:"U" }}"
-             data-end="{{ data.end|date:"U" }}"
-             data-groundstation="{{ data.ground_station }}">
-          <div class="panel-heading">
-            <h3 class="panel-title">
-              Data payload #{{ data.id }} from {{ data.ground_station }}
-            </h3>
-          </div>
-          <div class="panel-body">
-            {% if data.payload %}
-              <div class="wave" id="data-{{ data.id }}"></div>
-            {% else %}
-              <div class="notice">
-                Waiting for data
-              </div>
-            {% endif %}
-          </div>
-          <div class="panel-footer">
-            <span class="label label-default">Timeframe</span>
-            {{ data.start|date:"Y-m-d H:i:s" }} ~ {{ data.end|date:"Y-m-d H:i:s" }}
-            <a href="{{ MEDIA_URL }}{{ data.payload }}"
+    <div class="col-md-12 observation-data" id="{{ observation.id }}"
+         data-start="{{ observation.start|date:"U" }}"
+         data-end="{{ observation.end|date:"U" }}"
+         data-groundstation="{{ observation.ground_station }}">
+      <h3>Payload</h3>
+
+      <ul class="nav nav-tabs observation-tabs" role="tablist">
+        <li role="presentation" class="active">
+          <a href="#tab-waterfall"
+             aria-controls="tab-waterfall"
+             role="tab"
+             data-toggle="tab">Waterfall
+           </a>
+        </li>
+        <li role="presentation">
+          <a href="#tab-audio"
+             aria-controls="tab-audio"
+             role="tab"
+             data-toggle="tab">Audio</a>
+        </li>
+        <li role="presentation">
+          <a href="#tab-data"
+             aria-controls="tab-data"
+             role="tab"
+             data-toggle="tab">Data</a>
+        </li>
+
+        <div class="pull-right">
+          {% if observation.payload %}
+            <a href="{{ MEDIA_URL }}{{ observation.payload }}"
                target="_blank"
-               class="pull-right"
                download="">
               <button type="button" class="btn btn-default btn-xs">
-                <span class="glyphicon glyphicon-download"></span> Data
+                <span class="glyphicon glyphicon-download"></span> Audio
               </button>
             </a>
-            <button type="button" class="btn btn-primary btn-xs pull-right playpause">
+          {% endif %}
+          {% if observation.waterfall %}
+            <a href="{{ MEDIA_URL }}{{ observation.waterfall }}"
+               target="_blank"
+               download="">
+              <button type="button" class="btn btn-default btn-xs">
+                <span class="glyphicon glyphicon-download"></span> Waterfall
+              </button>
+            </a>
+          {% endif %}
+        </div>
+      </ul>
+
+      <div class="tab-content">
+        <div role="tabpanel" class="tab-pane active" id="tab-waterfall">
+          {% if observation.waterfall %}
+            <div id="waterfall-{{ observation.id }}" class="waterfall">
+              <img class="img-responsive waterfall" src="{{ MEDIA_URL }}{{ observation.waterfall }}" alt="waterfall">
+            </div>
+          {% else %}
+            <div class="notice">
+              Waiting for waterfall
+            </div>
+          {% endif %}
+        </div>
+        <div role="tabpanel" class="tab-pane" id="tab-audio">
+          {% if observation.payload %}
+            <div id="loading-{{ observation.id }}" class="notice">Loading audio...</div>
+            <div class="progress progress-striped active" id="progress-bar-{{ observation.id }}">
+              <div class="progress-bar progress-bar-info"></div>
+            </div>
+            <div class="wave tab-data" id="data-{{ observation.id }}"
+                 data-id="{{ observation.id }}"
+                 data-payload="{{ MEDIA_URL }}{{ observation.payload }}"></div>
+            <div id="wave-spectrogram"></div>
+            <button type="button" class="btn btn-primary btn-xs playpause">
               <span class="glyphicon glyphicon-play"></span>
               <span class="glyphicon glyphicon-pause"></span>
             </button>
-          </div>
+            <span id="playback-time-{{ observation.id }}" class="label label-info playback-time"></span>
+          {% else %}
+            <div class="notice">
+              Waiting for audio
+            </div>
+          {% endif %}
         </div>
-      {% endfor %}
+        <div role="tabpanel" class="tab-pane tab-data" id="tab-data">
+          {% if observation.demoddata.all %}
+            {% for demoddata in observation.demoddata.all %}
+              <span class="label label-default">{{ demoddata.payload_demod }}</span>
+              <div class="well well-sm data-well">
+                {% if demoddata.is_image %}
+                  <img src="{{ demoddata.payload_demod.url }}" alt="observation-{{ observation.pk }}" class="img-responsive">
+                {% else %}
+                  {{ demoddata.display_payload }}
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="notice">
+              Waiting for demoded data
+            </div>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
-{% endif %}
+
+  <hr>
+
+  <div class="row tle-data">
+    <div class="col-md-12">
+      <h3>TLE used <small>by Celestrak</small></h3>
+      <pre>{{ observation.tle.tle1 }}<br>{{ observation.tle.tle2 }}</pre>
+    </div>
+  </div>
+
+  <!-- UTC Modal -->
+  {% include 'includes/utc.html' %}
+
+  <!-- Satellite Modal -->
+  {% include 'includes/satellite.html' %}
 
 {% endblock content %}
 
 {% block javascript %}
-<script src="{% static 'js/d3.v3.min.js' %}"></script>
-<script src="{% static 'js/d3-timeline.js' %}"></script>
-<script src="{% static 'js/wavesurfer.min.js' %}"></script>
-<script src="{% static 'js/observation_view.js' %}"></script>
+  <script src="{% static 'lib/wavesurfer.js/dist/wavesurfer.min.js' %}"></script>
+  <script src="{% static 'lib/wavesurfer.js/dist/plugin/wavesurfer.spectrogram.min.js' %}"></script>
+  <script src="{% static 'lib/moment/min/moment.min.js' %}"></script>
+  <script src="{% static 'lib/urijs/src/URI.min.js' %}"></script>
+  <script src="{% static 'js/utc.js' %}"></script>
+  <script src="{% static 'js/observation_view.js' %}"></script>
+  <script src="{% static 'js/satellite.js' %}"></script>
 {% endblock javascript %}

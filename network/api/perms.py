@@ -10,13 +10,12 @@ class SafeMethodsOnlyPermission(permissions.BasePermission):
         return request.method in permissions.SAFE_METHODS
 
 
-class StationOwnerCanEditPermission(SafeMethodsOnlyPermission):
-    """Only the owner can push new data"""
-    def has_object_permission(self, request, view, obj=None):
-        if obj is None:
-            can_edit = True
+class StationOwnerCanEditPermission(permissions.BasePermission):
+    """Only the owner can edit station jobs"""
+    def has_object_permission(self, request, view, obj):
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        if request.user.is_authenticated() and request.user == obj.ground_station.owner:
+            return True
         else:
-            can_edit = request.user == obj.observation.author
-        return (can_edit or
-                super(StationOwnerCanEditPermission,
-                      self).has_object_permission(request, view, obj))
+            return False

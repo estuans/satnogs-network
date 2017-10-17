@@ -1,91 +1,132 @@
-$(function () {
-  $('#datetimepicker-start').datetimepicker();
-  $('#datetimepicker-start').data("DateTimePicker").setMinDate(moment().add(1,'h'));
-  $('#datetimepicker-end').datetimepicker();
-  $("#datetimepicker-start").on("dp.change",function (e) {
-    //Setting minimum and maximum for end
-    $('#datetimepicker-end').data("DateTimePicker").setMinDate(e.date);
-    $('#datetimepicker-end').data("DateTimePicker").setMaxDate(moment(e.date).add(24, 'h'));
-  });
+/* global moment, d3 */
 
-  $('#satellite-selection').change( function() {
-    var norad = $(this).find(':selected').data("norad");
-    $('#transponder-selection').prop("disabled", false);
-    $('#transponder-selection option').hide();
-    $('#transponder-selection option[data-satellite="'+norad+'"]').show().prop("selected", true);
-    if($('#transponder-selection option:visible').length === 0) {
-      $('#transponder-selection').prop("disabled", true);
-      $('#transponder-selection option[id="no-transponder"]').show().prop("selected", true);
+$(document).ready( function(){
+    function select_proper_transmitters(satellite) {
+        $('#transmitter-selection').prop('disabled', false);
+        $('#transmitter-selection option').hide();
+        $('#transmitter-selection option[data-satellite="' + satellite + '"]').show().prop('selected', true);
+
+        $('.tle').hide();
+        $('.tle[data-norad="' + satellite + '"]').show();
     }
-  });
-});
 
-$( document ).ready( function(){
-  $('#calculate-observation').click( function(){
-    $('.calculation-result').show();
-    var satellite = $('#satellite-selection').val();
-    var start_time = $('#datetimepicker-start input').val();
-    var end_time = $('#datetimepicker-end input').val();
+    var satellite;
 
-    $.ajax({
-      url: '/prediction_windows/'+satellite+'/'+start_time+'/'+end_time+'/'
-      }).done(function(data) {
-        var dc = 0; //Data counter
-        var suggested_data = [];
-        $.each(data, function( i,k ){
-          label = k.id + " - " + k.name;
-          var times = [];
-          //console.log(k);
-          $.each(k.window, function( m,n ){
-            var starting_time = moment(n.start).valueOf();
-            var ending_time = moment(n.end).valueOf();
-            $('#windows-data').append('<input type="hidden" name="'+dc+'-starting_time" value="'+n.start+'">');
-            $('#windows-data').append('<input type="hidden" name="'+dc+'-ending_time" value="'+n.end+'">');
-            $('#windows-data').append('<input type="hidden" name="'+dc+'-station" value="'+k.id+'">');
-            times.push({starting_time: starting_time, ending_time: ending_time})
-            dc = dc +1;
-          });
-          suggested_data.push({label : label, times : times});
-          //console.log(k);
-          //console.log(k.name);
+    var obs_filter = $('#form-obs').data('obs-filter');
+    var obs_filter_dates = $('#form-obs').data('obs-filter-dates');
+    var obs_filter_station = $('#form-obs').data('obs-filter-station');
+
+    if (obs_filter) {
+        satellite = $('input[name="satellite"]').val();
+        var ground_station = $('input[name="ground_station"]').val();
+    }
+
+    if (!obs_filter_dates) {
+        var minstart = $('#datetimepicker-start').data('date-minstart');
+        var minend = $('#datetimepicker-end').data('date-minend');
+        var maxrange = $('#datetimepicker-end').data('date-maxrange');
+        $('#datetimepicker-start').datetimepicker();
+        $('#datetimepicker-start').data('DateTimePicker').minDate(moment.utc().add(minstart, 'm'));
+        $('#datetimepicker-end').datetimepicker();
+        $('#datetimepicker-end').data('DateTimePicker').minDate(moment.utc().add(minend, 'm'));
+        $('#datetimepicker-start').on('dp.change',function (e) {
+            // Setting default, minimum and maximum for end
+            $('#datetimepicker-end').data('DateTimePicker').defaultDate(moment.utc(e.date).add(60, 'm'));
+            $('#datetimepicker-end').data('DateTimePicker').minDate(e.date);
+            $('#datetimepicker-end').data('DateTimePicker').maxDate(moment.utc(e.date).add(maxrange, 'm'));
         });
-        
-        $('#windows-data').append('<input type="hidden" name="total" value="'+dc+'">');
-        /*data.each(function( index ){
-          var data_groundstation = $(this).data('groundstation');
-          var data_time_start = 1000 * $(this).data('start');
-          var data_time_end = 1000 * $(this).data('end');
-          observation_data.push({label : data_groundstation, times : [{starting_time: data_time_start, ending_time: data_time_end}]});
-        });*/
-        timeline_init(start_time, end_time, suggested_data);
-      });
+    }
 
-  });
-});
+    select_proper_transmitters(satellite);
 
-function timeline_init( start, end, payload ){
-  var start_time_timeline = moment(start).valueOf();
-  var end_time_timeline = moment(end).valueOf();
+    $('#satellite-selection').bind('keyup change', function() {
+        satellite = $(this).find(':selected').data('norad');
+        select_proper_transmitters(satellite);
+    });
 
-  $('#timeline').empty();
+    $('#calculate-observation').click( function(){
+        $('.calculation-result').show();
+        $('#timeline').empty();
+        $('#hoverRes').hide();
+        $('#windows-data').empty();
+        var start_time = $('#datetimepicker-start input').val();
+        var end_time = $('#datetimepicker-end input').val();
+        var transmitter = $('#transmitter-selection').find(':selected').val();
 
-  var chart = d3.timeline()
-              .stack()
-              .beginning(start_time_timeline)
-              .ending(end_time_timeline)
-              .hover(function (d, i, datum) {
-                // d is the current rendering object
-                // i is the index during d3 rendering
-                // datum is the id object
+        var url = '/prediction_windows/' + satellite + '/' + transmitter + '/' + start_time + '/' + end_time + '/';
+
+        if (obs_filter_station) {
+            url = '/prediction_windows/' + satellite + '/' + transmitter + '/' + start_time + '/' + end_time + '/' + ground_station + '/';
+        }
+
+        $.ajax({
+            url: url,
+            beforeSend: function() { $('#loading').show(); }
+        }).done(function(data) {
+            $('#loading').hide();
+            if (data.error) {
+                var error_msg = data.error;
+                $('#windows-data').html('<span class="text-danger">' + error_msg + '</span>');
+            } else {
+                var dc = 0; // Data counter
+                var suggested_data = [];
+                var label = '';
+                $('#windows-data').empty();
+                $.each(data, function(i, k){
+                    label = k.id + ' - ' + k.name;
+                    var times = [];
+                    $.each(k.window, function(m, n){
+                        var starting_time = moment.utc(n.start).valueOf();
+                        var ending_time = moment.utc(n.end).valueOf();
+                        $('#windows-data').append('<input type="hidden" name="' + dc + '-starting_time" value="' + n.start + '">');
+                        $('#windows-data').append('<input type="hidden" name="' + dc + '-ending_time" value="' + n.end + '">');
+                        $('#windows-data').append('<input type="hidden" name="' + dc + '-station" value="' + k.id + '">');
+                        times.push({starting_time: starting_time, ending_time: ending_time});
+                        dc = dc + 1;
+                    });
+                    suggested_data.push({label: label, times: times});
+                });
+
+                $('#windows-data').append('<input type="hidden" name="total" value="' + dc + '">');
+                if (dc > 0) {
+                    timeline_init(start_time, end_time, suggested_data);
+                } else {
+                    var empty_msg = 'No Ground Station available for this observation window';
+                    $('#windows-data').html('<span class="text-danger">' + empty_msg + '</span>');
+                }
+            }
+        });
+    });
+
+    function timeline_init(start, end, payload){
+        var start_time_timeline = moment.utc(start).valueOf();
+        var end_time_timeline = moment.utc(end).valueOf();
+
+        $('#timeline').empty();
+        $('.coloredDiv').css('background-color', 'transparent');
+        $('#name').empty();
+
+        var chart = d3.timeline()
+            .beginning(start_time_timeline)
+            .ending(end_time_timeline)
+            .hover(function (d, i, datum) {
                 var div = $('#hoverRes');
                 var colors = chart.colors();
-                div.find('.coloredDiv').css('background-color', colors(i))
+                div.find('.coloredDiv').css('background-color', colors(i));
                 div.find('#name').text(datum.label);
-              })
-              .margin({left:140, right:10, top:0, bottom:50})
-              .tickFormat({format: d3.time.format("%H:%M"), tickTime: d3.time.minutes, tickInterval: 30, tickSize: 6})
-              ;
+            })
+            .margin({left:140, right:10, top:0, bottom:50})
+            .tickFormat({format: d3.time.format.utc('%H:%M'), tickTime: d3.time.minutes, tickInterval: 30, tickSize: 6})
+            .stack();
 
-  var svg = d3.select("#timeline").append("svg").attr("width", 1140)
-    .datum(payload).call(chart);
-}
+        var svg_width = 1140;
+        if (screen.width < 1200) { svg_width = 940; }
+        if (screen.width < 992) { svg_width = 720; }
+        if (screen.width < 768) { svg_width = screen.width - 30; }
+        d3.select('#timeline').append('svg').attr('width', svg_width)
+            .datum(payload).call(chart);
+
+        $('#hoverRes').show();
+        $('#schedule-observation').removeAttr('disabled');
+    }
+});

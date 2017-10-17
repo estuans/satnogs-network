@@ -1,20 +1,12 @@
-from django.conf.urls import patterns, url, include
 from rest_framework import routers
-
 from network.api import views
 
 
 router = routers.DefaultRouter()
 
-router.register(r'antennas', views.AntennaView)
-router.register(r'data', views.DataView)
-router.register(r'observations', views.ObservationView)
-router.register(r'satellites', views.SatelliteView)
-router.register(r'stations', views.StationView)
-router.register(r'transponders', views.TransponderView)
-router.register(r'jobs', views.JobView)
+router.register(r'jobs', views.JobView, base_name='jobs')
+router.register(r'data', views.ObservationView, base_name='data')
+router.register(r'observations', views.ObservationView, base_name='observations')
+router.register(r'settings', views.SettingsView, base_name='settings')
 
-urlpatterns = patterns(
-    '',
-    url(r'^', include(router.urls))
-)
+api_urlpatterns = router.urls

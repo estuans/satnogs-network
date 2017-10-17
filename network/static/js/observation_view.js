@@ -1,52 +1,106 @@
-// Timeline loading
+/* global WaveSurfer URI */
 
-observation_start = 1000 * $('#observation-info').data('start');
-observation_end = 1000 * $('#observation-info').data('end');
+$(document).ready(function() {
+    'use strict';
 
-var observation_data = [];
+    // Format time for the player
+    function formatTime(timeSeconds) {
+        var minute = Math.floor(timeSeconds / 60);
+        var tmp = Math.round(timeSeconds - (minute * 60));
+        var second = (tmp < 10 ? '0' : '') + tmp;
+        return String(minute + ':' + second);
+    }
 
-$('.observation-data').each(function( index ){
-  var data_groundstation = $(this).data('groundstation');
-  var data_time_start = 1000 * $(this).data('start');
-  var data_time_end = 1000 * $(this).data('end');
-  observation_data.push({label : data_groundstation, times : [{starting_time: data_time_start, ending_time: data_time_end}]});
-});
+    // Set width for not selected tabs
+    var panelWidth = $('.tab-content').first().width();
+    $('.tab-pane').css('width', panelWidth);
 
-var chart = d3.timeline()
-            .stack()
-            .beginning(observation_start)
-            .ending(observation_end)
-            .hover(function (d, i, datum) {
-              // d is the current rendering object
-              // i is the index during d3 rendering
-              // datum is the id object
-              var div = $('#hoverRes');
-              var colors = chart.colors();
-              div.find('.coloredDiv').css('background-color', colors(i))
-              div.find('#name').text(datum.label);
-            })
-            .margin({left:140, right:10, top:0, bottom:50})
-            .tickFormat({format: d3.time.format("%H:%M"), tickTime: d3.time.minutes, tickInterval: 30, tickSize: 6})
-            ;
+    // Waveform loading
+    $('.wave').each(function(){
+        var $this = $(this);
+        var wid = $this.data('id');
+        var wavesurfer = Object.create(WaveSurfer);
+        var data_payload_url = $this.data('payload');
+        var container_el = '#data-' + wid;
+        $(container_el).css('opacity', '0');
+        var loading = '#loading-' + wid;
+        var $playbackTime = $('#playback-time-' + wid);
+        var progressDiv = $('#progress-bar-' + wid);
+        var progressBar = $('.progress-bar', progressDiv);
 
-var svg = d3.select("#timeline").append("svg").attr("width", 1140)
-  .datum(observation_data).call(chart);
+        var showProgress = function (percent) {
+            if (percent == 100) {
+                $(loading).text('Analyzing data...');
+            }
+            progressDiv.css('display', 'block');
+            progressBar.css('width', percent + '%');
+            progressBar.text(percent + '%');
+        };
 
-// Waveform loading
-$('.observation-data').each(function( index ){
-  var wavesurfer = Object.create(WaveSurfer);
-  var data_payload_url = $(this).data('payload');
-  var container_el = '#data-' + $(this).data('id');
+        var hideProgress = function () {
+            progressDiv.css('display', 'none');
+        };
 
-  wavesurfer.init({
-    container: container_el,
-    waveColor: '#bf7fbf',
-    progressColor: 'purple'
-  });
+        wavesurfer.init({
+            container: container_el,
+            waveColor: '#bf7fbf',
+            progressColor: 'purple'
+        });
 
-  $(this).find('.playpause').click( function(){
-    wavesurfer.playPause();
-  });
+        wavesurfer.on('destroy', hideProgress);
+        wavesurfer.on('error', hideProgress);
 
-  wavesurfer.load(data_payload_url);
+        wavesurfer.on('loading', function(percent) {
+            showProgress(percent);
+            $(loading).show();
+        });
+
+        $this.parents('.observation-data').find('.playpause').click( function(){
+            wavesurfer.playPause();
+        });
+
+        $('a[href="#tab-audio"]').on('shown.bs.tab', function () {
+            wavesurfer.load(data_payload_url);
+            $('a[href="#tab-audio"]').off('shown.bs.tab');
+        });
+
+        wavesurfer.on('ready', function() {
+            hideProgress();
+            var spectrogram = Object.create(WaveSurfer.Spectrogram);
+            spectrogram.init({
+                wavesurfer: wavesurfer,
+                container: '#wave-spectrogram',
+                fftSamples: 256,
+                windowFunc: 'hann'
+            });
+
+            //$playbackTime.text(formatTime(wavesurfer.getCurrentTime()));
+            $playbackTime.text(formatTime(wavesurfer.getCurrentTime()));
+
+            wavesurfer.on('audioprocess', function(evt) {
+                $playbackTime.text(formatTime(evt));
+            });
+            wavesurfer.on('seek', function(evt) {
+                $playbackTime.text(formatTime(wavesurfer.getDuration() * evt));
+            });
+            $(loading).hide();
+            $(container_el).css('opacity', '1');
+        });
+    });
+
+    // Handle Observation tabs
+    var uri = new URI(location.href);
+    var tab = uri.hash();
+    $('.observation-tabs li a[href="' + tab + '"]').tab('show');
+
+    // Delete confirmation
+    var message = 'Do you really want to delete this Observation?';
+    var actions = $('#obs-delete');
+    if (actions.length) {
+        actions[0].addEventListener('click', function(e) {
+            if (! confirm(message)) {
+                e.preventDefault();
+            }
+        });
+    }
 });

@@ -1,9 +1,20 @@
 {% extends "base.html" %}
+{% load staticfiles %}
 
-{% block title %}Page Not found{% endblock %}
+{% block title %} - Page Not found{% endblock %}
 
 {% block content %}
-<h1>Page Not found</h1>
+  <div class="error">
+    <h1>404</h1>
 
-<p>This is not the page you were looking for.</p>
+    <h3>Page Not Found</h3>
+
+    <p>
+      This is not the page you were looking for.
+      Head back to <a href="{% url 'base:home' %}">homepage</a>.
+    </p>
+
+    <p><img src="{% static 'img/error.png' %}"></p>
+
+  </div>
 {% endblock content %}

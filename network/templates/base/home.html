@@ -3,21 +3,19 @@
 {% load staticfiles %}
 {% load tags %}
 
-{% block title %}Home{% endblock %}
+{% block title %} - Home{% endblock %}
 
 {% block css %}
-  <script src='https://api.tiles.mapbox.com/mapbox.js/v2.1.4/mapbox.js'></script>
-  <link href='https://api.tiles.mapbox.com/mapbox.js/v2.1.4/mapbox.css' rel='stylesheet' />
+  <link rel="stylesheet" href="{% static 'lib/mapbox.js/mapbox.css' %}">
 {% endblock css %}
 
 {% block prenav-content %}
-  <div id="map"></div>
+  <div id="map" data-mapboxid="{{ mapbox_id }}" data-mapboxtoken="{{ mapbox_token }}" data-stations="{% url 'base:stations_all' %}"></div>
 {% endblock prenav-content %}
 
 {% block content %}
   <div class="row" id="call2action">
-    {% if request.user.is_authenticated %}
-    {% else %}
+    {% if not request.user.is_authenticated %}
       <div class="col-md-8 col-md-offset-2 panel panel-default">
         <h3 class="text-center">
           Ground stations swarm control, at your fingertips.
@@ -32,77 +30,79 @@
     {% endif %}
   </div>
   <div class="row">
-    <div class="col-md-4">
-      <div class="panel panel-default">
-        <div class="panel-heading">
-          <h3 class="panel-title">Featured Ground Station</h3>
-        </div>
-        <div class="panel-body">
-          <div class="text-center">
-            <img src="{{ MEDIA_URL }}{{ featured_station.image }}"
-                 class="img-gs-front"
-                 alt="{{ featured_station.name }}"
-                 title="{{ featured_station.name }}">
-            <h3>
-              <a href="{% url 'base:station_view' id=featured_station.id %}">
-                 {{ featured_station.name }}
-              </a>
-            </h3>
+    {% if featured_station %}
+      <div class="col-md-4">
+        <div class="panel panel-default">
+          <div class="panel-heading">
+            <h3 class="panel-title">Featured Ground Station</h3>
           </div>
-          <div class="caption">
-            <div class="gs-front-line">
-              <span class="label label-info">Owner</span>
-              <span class="gs-front-data">
-                <a href="{% url 'users:view_user' username=featured_station.owner.username %}">
-                  {{ featured_station.owner.get_full_name }}
+          <div class="panel-body">
+            <div class="text-center">
+              <img src="{{ featured_station.get_image }}"
+                   class="img-gs-front"
+                   alt="{{ featured_station.name }}"
+                   title="{{ featured_station.name }}">
+              <h3>
+                <a href="{% url 'base:station_view' id=featured_station.id %}">
+                   {{ featured_station.name }}
                 </a>
-              </span>
+              </h3>
             </div>
-            <div class="gs-front-line">
-              <span class="label label-info">Coordinates</span>
-              <span class="gs-front-data">
-                {{ featured_station.lng|floatformat:2 }}°,
-                {{ featured_station.lat|floatformat:2 }}°
-              </span>
-            </div>
-            <div class="gs-front-line">
-              <span class="label label-info">Antennas</span>
-              <span class="gs-front-data">
-                {% for antenna in featured_station.antenna.all %}
-                  {{antenna.band}} {{ antenna.antenna_type }}{% if forloop.last %}{% else %},{% endif %}
-                {% endfor %}
-              </span>
-            </div>
-            <div class="gs-front-line">
-              <span class="label label-info">Success Rate</span>
-              <span class="gs-front-data">
-                <div class="progress">
-                  <div class="progress-bar progress-bar-success" style="width: 88%">
-                    <span class="sr-only">88% Complete (success)</span>
-                  </div>
-                  <div class="progress-bar progress-bar-danger" style="width: 12%">
-                    <span class="sr-only">12% Complete (danger)</span>
-                  </div>
+            <div class="caption">
+              <div class="front-line">
+                <span class="label label-default">Owner</span>
+                <span class="front-data">
+                  <a href="{% url 'users:view_user' username=featured_station.owner.username %}">
+                    {{ featured_station.owner.displayname }}
+                  </a>
+                </span>
+              </div>
+              <div class="front-line">
+                <span class="label label-default">Coordinates</span>
+                <span class="front-data">
+                  {{ featured_station.lng|floatformat:2 }}°,
+                  {{ featured_station.lat|floatformat:2 }}°
+                </span>
+              </div>
+              <div class="front-line">
+                <span class="label label-default">Antennas</span>
+                <span class="front-data">
+                  {% for antenna in featured_station.antenna.all %}
+                    {{antenna.band}} {{ antenna.antenna_type }}{% if forloop.last %}{% else %},{% endif %}
+                  {% endfor %}
+                </span>
+              </div>
+              {% if featured_station.success_rate %}
+                <div class="front-line">
+                  <span class="label label-default">Success Rate</span>
+                  <span class="front-data">
+                    <div class="progress" title="{{ featured_station.success_rate }}%">
+                      <div class="progress-bar progress-bar-success" data-success-rate="{{ featured_station.success_rate }}">
+                        <span class="sr-only">{{ featured_station.success_rate }}% Complete (success)</span>
+                      </div>
+                      <div class="progress-bar progress-bar-danger" data-percentagerest="{{ featured_station.success_rate|percentagerest }}">
+                        <span class="sr-only">{{ featured_station.success_rate|percentagerest }}% Complete (danger)</span>
+                      </div>
+                    </div>
+                  </span>
                 </div>
-              </span>
+              {% endif %}
             </div>
           </div>
         </div>
       </div>
-    </div>
-    <div class="col-md-8">
-      <!-- Nav tabs -->
+    {% endif %}
+    <div class="{% if featured_station %}col-md-8{% else %}col-md-12{% endif %}">
       <ul class="nav nav-tabs" role="tablist">
         <li class="active">
-          <a href="#successful" class="toggle" role="tab" data-toggle="tab">Latest Observations</a>
+          <a href="#latest" class="toggle" role="tab" data-toggle="tab">Latest Observations</a>
         </li>
         <li>
           <a href="#scheduled" class="toggle" role="tab" data-toggle="tab">Scheduled Observations</a>
         </li>
       </ul>
-      <!-- Tab panes -->
       <div class="tab-content">
-        <div class="tab-pane active" id="successful">
+        <div class="tab-pane active" id="latest">
           <table class="table table-hover">
             <thead>
               <th>ID</th>
@@ -110,30 +110,42 @@
               <th>Frequency</th>
               <th>Encoding</th>
               <th>Timeframe</th>
-              <th>Observer</th>
+              <th>Station</th>
             </thead>
             <tbody>
               {% for observation in latest_observations.all %}
                 <tr>
                   <td>
                     <a href="{% url 'base:observation_view' id=observation.id %}">
-                      <span class="label
-                                   {% if not observation.data_set.all %}
-                                    label-danger
-                                   {% else %}
-                                    label-success
-                                   {% endif %}">
-                        {{ observation.id }}
+                      {% if observation.is_verified %}
+                        <span class="label label-success" title="There is known good data in this observation"
+                      {% elif observation.is_future %}
+                        <span class="label label-info" title="This observation is in the future"
+                      {% elif not observation.is_vetted %}
+                        <span class="label label-warning" title="There is data that needs vetting in this observation"
+                      {% else %}
+                        <span class="label label-danger" title="No good data in this observation"
+                      {% endif %}>
+                      {{ observation.id }}
                       </span>
                     </a>
                   </td>
-                  <td>{{ observation.satellite.name }}</td>
-                  <td>{% frq observation.transponder.downlink_low %}</td>
-                  <td>{{ observation.transponder.mode }}</td>
-                  <td>{{ observation.start|date:"Y-m-d H:i:s" }}</br>{{ observation.end|date:"Y-m-d H:i:s" }}</td>
                   <td>
-                    <a href="{% url 'users:view_user' username=observation.author.username %}">
-                      {{ observation.author.get_full_name }}
+                    <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ observation.satellite.norad_cat_id }}">
+                      {{ observation.satellite.name }}
+                    </a>
+                  </td>
+                  <td>{{ observation.transmitter.downlink_low|frq }}</td>
+                  <td>{{ observation.transmitter.mode|default:"-" }}</td>
+                  <td>
+                    <span class="datetime-date">{{ observation.start|date:"Y-m-d" }}</span>
+                    <span class="datetime-time">{{ observation.start|date:"H:i:s" }}</span><br>
+                    <span class="datetime-date">{{ observation.end|date:"Y-m-d" }}</span>
+                    <span class="datetime-time">{{ observation.end|date:"H:i:s" }}</span>
+                  </td>
+                  <td>
+                    <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
+                      {{ observation.ground_station }}
                     </a>
                   </td>
                 </tr>
@@ -149,7 +161,7 @@
               <th>Frequency</th>
               <th>Encoding</th>
               <th>Timeframe</th>
-              <th>Observer</th>
+              <th>Stations</th>
             </thead>
             <tbody>
               {% for observation in scheduled_observations.all %}
@@ -161,11 +173,24 @@
                       </span>
                     </a>
                   </td>
-                  <td>{{ observation.satellite.name }}</td>
-                  <td>{% frq observation.transponder.downlink_low %}</td>
-                  <td>{{ observation.transponder.mode }}</td>
-                  <td>{{ observation.start|date:"Y-m-d H:i:s" }}</br>{{ observation.end|date:"Y-m-d H:i:s" }}</td>
-                  <td>{{ observation.author.get_full_name }}</td>
+                  <td>
+                    <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ observation.satellite.norad_cat_id }}">
+                      {{ observation.satellite.name }}
+                    </a>
+                  </td>
+                  <td>{{ observation.transmitter.downlink_low|frq }}</td>
+                  <td>{{ observation.transmitter.mode }}</td>
+                  <td>
+                    <span class="datetime-date">{{ observation.start|date:"Y-m-d" }}</span>
+                    <span class="datetime-time">{{ observation.start|date:"H:i:s" }}</span><br>
+                    <span class="datetime-date">{{ observation.end|date:"Y-m-d" }}</span>
+                    <span class="datetime-time">{{ observation.end|date:"H:i:s" }}</span>
+                  </td>
+                  <td>
+                    <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
+                      <span class="label label-primary">{{ observation.ground_station.name }}</span>
+                    </a>
+                  </td>
                 </tr>
               {% endfor %}
             </tbody>
@@ -187,18 +212,26 @@
           <h4 class="modal-title" id="myModalLabel">Join SatNGOS Network</h4>
         </div>
         <div class="modal-body">
-          SatNOGS network is under active development and not fully
-          operational for Ground Station operators yet. Meanwhile you can join us by:
-          <h3>Building a ground station</h3>
+          SatNOGS network is a global management interface to facilitate multiple ground station
+          operations remotely. An observer is able to take advantage of the full network of
+          SatNOGS ground stations around the world.
+          <h3>Observations</h3>
+          The network is open to anyone. Any observer is able to utilize all available Ground Stations
+          and communicate with Satellites. All observations results are public
+          and all data are distributed freely under the
+          <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative Commons Atribution-Share Alike</a> license.
+          <h3>Ground Stations</h3>
           Whether you own satellite ground station equipment or you want
           to build one you can head to
           <a href="https://satnogs.org" target="_blank">SatNOGS Project site</a>
           to get up to date documentation and info on how to build a SatNOGS ground station (still under development).
           <h3>Coding</h3>
-          Fluent in Python and/or JS? We need you to help with satnogs-network Django application. Visit
-          <a href="https://github.com/satnogs/satnogs-network/issues" target="_blank">our Github issues page</a> to
-          start filling issues or code fixes for existing ones. Detailed contribution and development documentation
-          is also availble <a href="https://github.com/satnogs/satnogs-network" target="_blank">here</a>.
+          Fluent in Python and/or JS? We need you to help with satnogs-network web application. Take a look to our
+          <a href="https://github.com/satnogs/satnogs-network/issues" target="_blank">source code</a> or visit
+          our <a href="https://github.com/satnogs/satnogs-network/issues" target="_blank">issues tracker</a>
+          to start filling bugs, feature requests or code fixes for existing ones.
+          Detailed contribution and development documentation is also availble at
+          <a href="http://docs.satnogs.org" target="_blank">docs.satnogs.org</a>.
         </div>
         <div class="modal-footer">
           <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
@@ -206,8 +239,11 @@
       </div>
     </div>
   </div>
+  {% include 'includes/satellite.html' %}
 {% endblock content %}
 
 {% block javascript %}
-  <script type="text/javascript" src="{% static 'js/home.js' %}"></script>
+  <script src="{% static 'lib/mapbox.js/mapbox.js' %}"></script>
+  <script src="{% static 'js/home.js' %}"></script>
+  <script src="{% static 'js/satellite.js' %}"></script>
 {% endblock %}

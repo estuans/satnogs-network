@@ -1,0 +1,45 @@
+{
+    "name": "satnogs-network",
+    "version": "0.1.0",
+    "description": "a network of distributed SatNOGS ground stations",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/satnogs/satnogs-network"
+    },
+    "author": "SatNOGS",
+    "license": "AGPL-3.0",
+    "devDependencies": {
+        "gulp": "^3.9.1",
+        "gulp-eslint": "^3.0.1",
+        "gulp-stylelint": "^3.9.0"
+    },
+    "dependencies": {
+        "bootstrap": "^3.3.7",
+        "d3": "^3.5.17",
+        "d3-timeline": "jiahuang/d3-timeline",
+        "dnt-helper": "schalkneethling/dnt-helper",
+        "eonasdan-bootstrap-datetimepicker": "^4.17.47",
+        "jquery": "^3.2.1",
+        "mapbox.js": "^3.1.1",
+        "moment": "^2.18.1",
+        "urijs": "^1.18.12",
+        "wavesurfer.js": "^1.4.0"
+    },
+    "assets": [
+        "jquery/dist/jquery.min.js",
+        "bootstrap/dist/css/bootstrap.min.css",
+        "bootstrap/dist/js/bootstrap.min.js",
+        "bootstrap/dist/fonts/*",
+        "eonasdan-bootstrap-datetimepicker/build/css/bootstrap-datetimepicker.min.css",
+        "eonasdan-bootstrap-datetimepicker/build/js/bootstrap-datetimepicker.min.js",
+        "d3/d3.min.js",
+        "d3-timeline/src/d3-timeline.js",
+        "mapbox.js/mapbox.css",
+        "mapbox.js/mapbox.js",
+        "moment/min/moment.min.js",
+        "wavesurfer.js/dist/wavesurfer.min.js",
+        "wavesurfer.js/dist/plugin/wavesurfer.spectrogram.min.js",
+        "urijs/src/URI.min.js",
+        "dnt-helper/js/dnt-helper.js"
+    ]
+}

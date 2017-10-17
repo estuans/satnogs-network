@@ -1,40 +1,29 @@
-{% load staticfiles i18n %}
+{% load staticfiles %}
 {% load avatar_tags %}
 {% load tags %}
+{% load compress %}
 
 <!DOCTYPE html>
-<html lang="en" ng-app>
+<html lang="en">
   <head>
     <meta charset="utf-8">
-    <title>SatNOGS - Network - {% block title %}{% endblock title %}</title>
+    <title>SatNOGS Network{% block title %}{% endblock title %}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="">
-    <meta name="author" content="">
+    {% compress css %}
+      <link rel="stylesheet" href="{% static 'lib/bootstrap/dist/css/bootstrap.min.css' %}">
+      <link rel="stylesheet" href="{% static 'css/app.css' %}">
+      {% block css %}
+      {% endblock %}
+    {% endcompress %}
 
-    <!-- HTML5 shim, for IE6-8 support of HTML5 elements -->
-    <!--[if lt IE 9]>
-      <script src="//html5shim.googlecode.com/svn/trunk/html5.js"></script>
-    <![endif]-->
-
-    <!-- Latest compiled and minified CSS -->
-    <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
-
-    <!-- Optional theme -->
-    <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap-theme.min.css">
-
-    <!-- Your stuff: Third-party css libraries go here -->
-
-    <!-- This file store project specific CSS -->
-    <link href="{% static 'css/project.css' %}" rel="stylesheet">
-    {% block css %}
-    {% endblock %}
-
-    <link rel="shortcut icon" href="{% static 'images/favicon.ico' %}">
+    <link rel="shortcut icon" href="{% static 'favicon.ico' %}">
 
   </head>
 
   <body>
+    {{ stage_notice }}
     {% block prenav-content %}{% endblock %}
+
     <div class="container">
       <nav class="navbar navbar-default" role="navigation" id="main-navbar">
         <div class="container-fluid">
@@ -47,17 +36,18 @@
               <span class="icon-bar"></span>
             </button>
             <a class="navbar-brand" href="{% url 'base:home' %}">
-              <img id="navbar-logo" src="{% static 'images/satnogs_net.png' %}" alt="SatNOGS net">
+              <img id="navbar-logo" src="{% static 'img/satnogs_net.png' %}" alt="SatNOGS net">
             </a>
           </div>
 
           <!-- Collect the nav links, forms, and other content for toggling -->
           <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
             <ul class="nav navbar-nav">
-              <li class="{% active request '^/$' %}"><a href="{% url 'base:home' %}">Home</a></li>
-              <li class="{% active request '^/observations/$' %}"><a href="{% url 'base:observations_list' %}">Observations</a></li>
-              <li class="{% active request '^/stations/$' %}"><a href="{% url 'base:stations_list' %}">Ground Stations</a></li>
-              <li class="{% active request '^/about/$' %}"><a href="{% url 'base:about' %}">About</a></li>
+              <li class="{% active request 'base:home' %}"><a href="{% url 'base:home' %}">Home</a></li>
+              <li class="{% active request 'base:about' %}"><a href="{% url 'base:about' %}">About</a></li>
+              <li class="{% active request 'base:observations_list' %}"><a href="{% url 'base:observations_list' %}">Observations</a></li>
+              <li class="{% active request 'base:stations_list' %}"><a href="{% url 'base:stations_list' %}">Ground Stations</a></li>
+              <li><a href="https://community.satnogs.org/" target="_blank" class="hidden-sm">Community</a></li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
               {% if request.user.is_authenticated %}
@@ -69,6 +59,9 @@
                 </a>
                 <ul class="dropdown-menu" role="menu">
                     <li><a href="{% url 'users:view_user' username=request.user.username %}">My Profile</a></li>
+                    {% if request.user.is_superuser %}
+                      <li><a href="{% url 'base:settings_site' %}">Site Settings</a></li>
+                    {% endif %}
                     <li><a href="{% url 'account_logout' %}">Logout</a></li>
                 </ul>
               </li>
@@ -85,9 +78,18 @@
     <div class="container">
 
       {% if messages %}
-          {% for message in messages %}
-              <div class="alert {% if message.tags %}alert-{{ message.tags }}"{% endif %}>{{ message }}</div>
-          {% endfor %}
+        <div class="row messages">
+          <div class="col-md-12">
+            {% for notification in messages %}
+              <div class="alert alert-{{ notification.tags }}" role="alert">
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+                {{ notification.message|safe }}
+              </div>
+            {% endfor %}
+          </div>
+        </div>
       {% endif %}
 
       {% block content %}{% endblock content %}
@@ -99,28 +101,30 @@
     <footer>
       <div class="container">
         <hr>
-        <p class="pull-right">
-          <a href="https://github.com/satnogs/satnogs-network">Contribute</a> |
-          <a href="#">Back to top</a>
-        </p>
-        <p>&copy; 2014 SatNOGS Team &middot;</p>
+        <div class="row">
+          <div class="col-md-6">
+            <span class="glyphicon glyphicon-copyright-mark" aria-hidden="true"></span> 2014<span id="copy"></span>
+            <a href="http://librespacefoundation.org/" target="_blank">Libre Space Foundation</a>.<br>
+            <span class="glyphicon glyphicon-cloud" aria-hidden="true"></span>
+            Observation data are freely distributed under the
+            <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA</a> license.
+          </div>
+          <div class="col-md-6 text-right footer-options">
+            <a href="https://satnogs.org/" target="_blank">SatNOGS</a> |
+            <a href="#top">Back to top</a>
+          </div>
+        </div>
       </div>
     </footer>
 
-    <!-- Le javascript
-    ================================================== -->
-    <!-- Placed at the end of the document so the pages load faster -->
-    <!-- Latest JQuery -->
-    <script src="//ajax.googleapis.com/ajax/libs/jquery/1.11.1/jquery.min.js"></script>
+    {% compress js %}
+      <script src="{% static 'lib/jquery/dist/jquery.min.js' %}"></script>
+      <script src="{% static 'lib/bootstrap/dist/js/bootstrap.min.js' %}"></script>
+      <script src="{% static 'js/app.js' %}"></script>
+      {% block javascript %}
+      {% endblock javascript %}
 
-    <!-- Latest compiled and minified JavaScript -->
-    <script src="//netdna.bootstrapcdn.com/bootstrap/3.2.0/js/bootstrap.min.js"></script>
-
-    <!-- Your stuff: Third-party javascript libraries go here -->
-
-    <!-- place project specific Javascript in this file -->
-    <script src="{% static 'js/project.js' %}"></script>
-    {% block javascript %}
-    {% endblock javascript %}
+      {{ analytics_code }}
+    {% endcompress %}
 </body>
 </html>

@@ -18,7 +18,15 @@ class User(AbstractUser):
 
     bio = models.TextField(default='', validators=[MaxLengthValidator(1000)])
 
+    @property
+    def displayname(self):
+        if self.get_full_name():
+            return self.get_full_name()
+        else:
+            return self.username
+
     def __unicode__(self):
         return self.username
+
 
 post_save.connect(gen_token, sender=User)

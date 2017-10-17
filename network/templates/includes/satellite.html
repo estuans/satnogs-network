@@ -1,0 +1,62 @@
+<div class="modal fade" id="SatelliteModal" tabindex="-1" role="dialog" aria-labelledby="SatelliteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Close</span></button>
+        <h4 class="modal-title" id="SatelliteModalTitle"></h4>
+      </div>
+        <div class="modal-body">
+          <div class="row panel-body">
+            <div class="col-md-4 panel-satellite">
+              <div>
+                <img class="satellite-img-full">
+              </div>
+            </div>
+            <div class="col-md-8">
+              <div class="satellite-info">
+                <span class="satellite-title"></span>
+                <span class="satellite-names"></span>
+              </div>
+              <div class="satellite-info">
+                <span class="label label-default">NORAD ID</span>
+                <span class="satellite-id"></span>
+              </div>
+              <div class="satellite-info">
+                <ul class="list-unstyled">
+                  <li>
+                    <span class="satellite-success"></span>
+                  </li>
+                  <li>
+                    <span class="label label-success satellite-verified" data-toggle="tooltip" data-placement="bottom" title="Successful observations"></span>
+                    <span class="label label-warning satellite-unknown" data-toggle="tooltip" data-placement="bottom" title="Unknown observations"></span>
+                    <span class="label label-danger satellite-empty" data-toggle="tooltip" data-placement="bottom" title="Empty observations"></span>
+                  </li>
+                </ul>
+              </div>
+              <div class="satellite-info">
+                <ul class="list-unstyled">
+                  <li>
+                    <span class="glyphicon glyphicon-plus" aria-hidden="true"></span>
+                    <a href="/observations/new/" id="new-obs-link">Schedule new Observation</a>
+                  </li>
+                  <li>
+                    <span class="glyphicon glyphicon-list-alt" aria-hidden="true"></span>
+                    <a href="/observations/" id="old-obs-link">Past Observations</a>
+                  </li>
+                  <li>&nbsp;</li>
+                  <li>
+                    <span class="glyphicon glyphicon-new-window" aria-hidden="true"></span>
+                    <a href="https://db.satnogs.org/" target="_blank" id="db-link">SatNOGS DB Entry & Data</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

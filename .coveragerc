@@ -1,0 +1,8 @@
+[run]
+source = network
+
+[report]
+omit = network/*/tests.py
+       network/settings.py
+       network/*/migrations/*
+show_missing = True

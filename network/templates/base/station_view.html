@@ -3,71 +3,134 @@
 
 {% load staticfiles %}
 
-{% block title %}Ground Station {{ station.name }}{% endblock %}
+{% block title %} - Ground Station {{ station.name }}{% endblock %}
 
 {% block css %}
-  <script src='https://api.tiles.mapbox.com/mapbox.js/v2.1.4/mapbox.js'></script>
-  <link href='https://api.tiles.mapbox.com/mapbox.js/v2.1.4/mapbox.css' rel='stylesheet' />
+  <link rel="stylesheet" href="{% static 'lib/mapbox.js/mapbox.css' %}">
 {% endblock css %}
 
 {% block content %}
-  <h2 id="station-info"
-      data-name="{{ station.name }}"
-      data-id="{{ station.id }}"
-      data-lng="{{ station.lng }}"
-      data-lat="{{ station.lat }}">
-     {{ station.id }} - {{ station.name }}
-    {% if request.user == station.owner %}
-      <button class="btn btn-primary pull-right" data-toggle="modal" data-target="#StationModal">Edit Ground Station</button>
-      <!-- Station Modal -->
-      {% include 'includes/station_edit.html' %}
-    {% endif %}
-  </h2
-
+  <div class="row">
+    <div class="col-md-6">
+      <h2 id="station-info"
+          data-name="{{ station.name }}"
+          data-id="{{ station.id }}"
+          data-lng="{{ station.lng }}"
+          data-lat="{{ station.lat }}">
+        {{ station.id }} - {{ station.name }}
+      </h2>
+    </div>
+    <div class="col-md-6 text-right">
+      <h2>
+        {% if request.user == station.owner %}
+          <button class="btn btn-primary" data-toggle="modal" data-target="#StationModal">
+            <span class="glyphicon glyphicon-pencil" aria-hidden="true"></span>
+            Edit
+          </button>
+          <a class="btn btn-danger" id="station-delete" href="{% url 'base:station_delete' id=station.id %}">
+            <span class="glyphicon glyphicon-remove" aria-hidden="true"></span>
+            Delete
+          </a>
+        {% endif %}
+      </h2>
+    </div>
+  </div>
   <div class="row">
     <div class="col-md-4">
-      <div class="gs-front-line">
+      <div class="front-line">
         <span class="label label-default">Owner</span>
-        <span class="gs-front-data">
+        <span class="front-data">
           <a href="{% url 'users:view_user' username=station.owner.username %}">
-            {{ station.owner.get_full_name }}
+            {{ station.owner.displayname }}
           </a>
         </span>
       </div>
-      <div class="gs-front-line">
-        <span class="label label-default">Location</span>
-        <span class="gs-front-data">
-          {{ station.location }}
-        </span>
-      </div>
-      <div class="gs-front-line">
+      {% if station.qthlocator %}
+        <div class="front-line">
+          <span class="label label-default">QTH Locator</span>
+          <span class="front-data">
+            {{ station.qthlocator }}
+          </span>
+        </div>
+      {% endif %}
+      {% if station.location %}
+        <div class="front-line">
+          <span class="label label-default">Location</span>
+          <span class="front-data">
+            {{ station.location }}
+          </span>
+        </div>
+      {% endif %}
+      <div class="front-line">
         <span class="label label-default">Coordinates</span>
-        <span class="gs-front-data">
-          {{ station.lat|floatformat:-3 }}, {{ station.lng|floatformat:-3 }}
+        <span class="front-data">
+          {{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°
         </span>
       </div>
-      <div class="gs-front-line">
+      <div class="front-line">
         <span class="label label-default">Altitude</span>
-        <span class="gs-front-data">
+        <span class="front-data">
           {{ station.alt }} m
         </span>
       </div>
-      <div class="gs-front-line">
+      <div class="front-line">
+        <span class="label label-default">Min Horizon</span>
+        <span class="front-data">
+          {{ station.horizon }}°
+        </span>
+      </div>
+      <div class="front-line">
+        <span class="label label-default">Rig</span>
+        <span class="front-data">
+          {{ station.rig|default:"-" }}
+        </span>
+      </div>
+      <div class="front-line">
         <span class="label label-default">Creation Date</span>
-        <span class="gs-front-data"
+        <span class="front-data"
               title="{{ station.created|date:"c" }}">
           {{ station.created|timesince }} ago
+        </span>
+      </div>
+      {% if station.success_rate %}
+        <div class="front-line">
+          <span class="label label-default">Success Rate</span>
+          <span class="front-data">
+            <div class="progress" title="{{ station.success_rate }}%">
+              <div class="gs progress-bar progress-bar-success" data-success-rate="{{ station.success_rate }}">
+                <span class="sr-only">{{ station.success_rate }}% Complete (success)</span>
+              </div>
+              <div class="gs progress-bar progress-bar-danger" data-percentagerest="{{ station.success_rate|percentagerest }}">
+                <span class="sr-only">{{ station.success_rate|percentagerest }}% Complete (danger)</span>
+              </div>
+            </div>
+          </span>
+        </div>
+      {% endif %}
+      <div class="front-line">
+        {% if station.online %}
+          <span class="label label-success">Online</span>
+        {% else %}
+          <span class="label label-danger">Offline</span>
+        {% endif %}
+        <span class="front-data"
+              title="{{ station.last_seen|date:"c" }}">
+          {% if station.last_seen %}
+            Last seen {{ station.last_seen|timesince }} ago
+          {% else %}
+            Never seen
+          {% endif %}
         </span>
       </div>
     </div>
     <div class="col-md-4">
       {% for antenna in station.antenna.all %}
-        <div class="gs-front-line">
-          <span class="label label-default">Antenna</span>
+        <div class="front-line">
+          <span class="label label-default">{{ antenna.get_antenna_type_display }} {{ antenna.band }} Antenna</span>
         </div>
         <div class="panel panel-default">
           <div class="panel-body">
-            {{ antenna.band }} - {{ antenna.antenna_type }} - {% frq antenna.frequency %}
+            {{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}
           </div>
         </div>
       {% empty %}
@@ -84,13 +147,244 @@
     </div>
   </div>
 
+  {% if station.description %}
+    <div class="row">
+      <div class="col-md-12">
+        <span>{{ station.description }}</span>
+      </div>
+    </div>
+  {% endif %}
   <div class="row">
     <div class="col-md-12">
-      <div id="map-station"></div>
+      <div id="map-station" data-mapboxid="{{ mapbox_id }}" data-mapboxtoken="{{ mapbox_token }}"></div>
     </div>
   </div>
+
+  <hr>
+
+  <div>
+    <ul class="nav nav-tabs" role="tablist">
+      <li class="active">
+        <a href="#observations" class="toggle" role="tab" data-toggle="tab">Recent Observations</a>
+      </li>
+      <li>
+        <a href="#satellites" class="toggle" role="tab" data-toggle="tab">Upcoming passes</a>
+      </li>
+    </ul>
+    <div class="tab-content">
+      <a class="btn btn-default btn-sm" role="button" href="#legend" data-toggle="modal" data-target="#LegendModal">
+          <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span> Legend
+      </a>
+      <div class="tab-pane active" id="observations">
+        <table class="table table-hover">
+          <thead>
+            <th>ID</th>
+            <th>Satellite</th>
+            <th>Frequency</th>
+            <th>Encoding</th>
+            <th>Timeframe</th>
+            <th>Observer</th>
+          </thead>
+          <tbody>
+            {% for observation in station.observations.all|slice:":30" %}
+              <tr>
+                <td>
+                  <a href="{% url 'base:observation_view' id=observation.id %}">
+                    {% if observation.is_verified %}
+                      <span class="label label-success" title="There is known good data in this observation"
+                    {% elif observation.is_future %}
+                      <span class="label label-info" title="This observation is in the future"
+                    {% elif not observation.is_vetted %}
+                      <span class="label label-warning" title="There is data that needs vetting in this observation"
+                    {% else %}
+                      <span class="label label-danger" title="No good data in this observation"
+                    {% endif %}>
+                    {{ observation.id }}
+                    </span>
+                  </a>
+                </td>
+                <td>
+                  <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ observation.satellite.norad_cat_id }}">
+                    {{ observation.satellite.name }}
+                  </a>
+                </td>
+                <td>{{ observation.transmitter.downlink_low|frq }}</td>
+                <td>{{ observation.transmitter.mode|default:"-" }}</td>
+                <td>
+                  <span class="datetime-date">{{ observation.start|date:"Y-m-d" }}</span>
+                  <span class="datetime-time">{{ observation.start|date:"H:i:s" }}</span><br>
+                  <span class="datetime-date">{{ observation.end|date:"Y-m-d" }}</span>
+                  <span class="datetime-time">{{ observation.end|date:"H:i:s" }}</span>
+                </td>
+                <td>
+                  <a href="{% url 'users:view_user' username=observation.author.username %}">
+                    {{ observation.author.displayname }}
+                  </a>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="tab-pane" id="satellites">
+        <div class="collapse in" id="collapseFilters">
+          <div class="filter-section">
+            <form id="antenna-filter" class="form-inline" method="get" action="{% url 'base:station_view' id=station.id %}#satellites">
+              <div class="form-group">
+                <div class="btn-group" data-toggle="buttons">
+                  <label class="btn btn-default btn-sm {% if unsupported_frequencies == '1' %}active{% endif %}"  aria-expanded="true" aria-controls="unsupported_frequencies">
+                    <input type="checkbox" name="unsupported_frequencies" {% if unsupported_frequencies == '1' %}checked{% endif %} autocomplete="off">
+                    <span class="glyphicon glyphicon-filter" aria-hidden="true"></span> Include unsupported satellites
+                  </label>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+        <table class="table table-hover table-responsive">
+          <thead>
+            <th>Name</th>
+            <th>Timeframe</th>
+            <th>⤉Rise°</th>
+            <th>⇴Max°</th>
+            <th>⤈Set°</th>
+            <th>Polar</th>
+            <th></th>
+          </thead>
+          <tbody>
+            {% for nextpass in nextpasses %}
+            <tr>
+              <td>
+                <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ nextpass.norad_cat_id }}">
+                  {{ nextpass.norad_cat_id }} - {{ nextpass.name }}
+                </a>
+                <div class="progress satellite-success">
+                  <div class="progress-bar progress-bar-success" style="width: {{ nextpass.success_rate }}%"
+                       data-toggle="tooltip" data-placement="bottom" title="{{ nextpass.success_rate }}% ({{ nextpass.verified_count }}) Verified">
+                    <span class="sr-only">{{ nextpass.success_rate }}% Verified</span>
+                  </div>
+                  <div class="progress-bar progress-bar-warning" style="width: {{ nextpass.unknown_rate }}%"
+                       data-toggle="tooltip" data-placement="bottom" title="{{ nextpass.unknown_rate }}% ({{ nextpass.unknown_count }}) Unknown">
+                    <span class="sr-only">{{ nextpass.unknown_rate }}% Unknown</span>
+                  </div>
+                  <div class="progress-bar progress-bar-danger" style="width: {{ nextpass.empty_rate }}%"
+                       data-toggle="tooltip" data-placement="bottom" title="{{ nextpass.empty_rate }}% ({{ nextpass.empty_count }}) Empty">
+                    <span class="sr-only">{{ nextpass.empty_rate }}% Empty</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="datetime-date">{{ nextpass.tr|date:"Y-m-d" }}</span>
+                <span class="datetime-time">{{ nextpass.tr|date:"H:i:s" }}</span><br>
+                <span class="datetime-date">{{ nextpass.ts|date:"Y-m-d" }}</span>
+                <span class="datetime-time">{{ nextpass.ts|date:"H:i:s" }}</span>
+              </td>
+              <td>
+                <span class="lightgreen">⤉</span>{{ nextpass.azr }}°
+              </td>
+              <td>
+                ⇴{{ nextpass.altt }}°
+              </td>
+              <td>
+                <span class="red">⤈</span>{{ nextpass.azs }}°
+              </td>
+              <td>
+                <canvas width="100" height="100" data-points="{{ nextpass.polar_data }}"></canvas>
+              </td>
+              <td>
+                {% if nextpass.valid and station.online and station.active %}
+                  <a href="{% url 'base:observation_new' %}?norad={{ nextpass.norad_cat_id }}&ground_station={{ station.id }}&start_date={{ nextpass.tr|date:"Y/m/d H:i" }}&end_date={{ nextpass.ts|date:"Y/m/d H:i" }}"
+                     class="btn btn-default">schedule</a>
+                {% else %}
+                  <a class="btn btn-default" disabled>schedule</a>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="collapse" id="collapseExample">
+    <div class="collapse in" id="collapseFilters">
+      <div class="filter-section">
+        <form id="antenna-filter" class="form-inline" method="get" action="{% url 'base:station_view' id=station.id %}">
+          <div class="form-group">
+            <h4>Filter:</h4>
+            <div class="btn-group" data-toggle="buttons">
+              <label class="btn btn-default btn-sm {% if unsupported_frequencies == '1' %}active{% endif %}"  aria-expanded="true" aria-controls="unsupported_frequencies">
+                <input type="checkbox" name="unsupported_frequencies" {% if unsupported_frequencies == '1' %}checked{% endif %} autocomplete="off">Include unsupported satellites
+              </label>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  <table class="table table-hover table-responsive">
+      <thead>
+        <th>Name</th>
+        <th>Timeframe</th>
+        <th>⤉Rise°</th>
+        <th>⇴Max°</th>
+        <th>⤈Set°</th>
+        <th>Polar</th>
+        <th></th>
+      </thead>
+      <tbody>
+        {% for nextpass in nextpasses %}
+          <tr>
+            <td>
+              <a href="#" data-toggle="modal" data-target="#SatelliteModal" data-id="{{ nextpass.norad_cat_id }}">
+                {{ nextpass.norad_cat_id }} - {{ nextpass.name }}
+              </a>
+            </td>
+            <td>
+              <span class="datetime-date">{{ nextpass.tr|date:"Y-m-d" }}</span>
+              <span class="datetime-time">{{ nextpass.tr|date:"H:i:s" }}</span><br>
+              <span class="datetime-date">{{ nextpass.ts|date:"Y-m-d" }}</span>
+              <span class="datetime-time">{{ nextpass.ts|date:"H:i:s" }}</span>
+            </td>
+            <td>
+              <span class="lightgreen">⤉</span>{{ nextpass.azr }}°
+            </td>
+            <td>
+              ⇴{{ nextpass.altt }}°
+            </td>
+            <td>
+              <span class="red">⤈</span>{{ nextpass.azs }}°
+            </td>
+            <td>
+              <canvas width="100" height="100" data-points="{{ nextpass.polar_data }}"></canvas>
+            </td>
+            <td>
+              {% if nextpass.valid and station.online and station.active %}
+                <a href="{% url 'base:observation_new' %}?norad={{ nextpass.norad_cat_id }}&ground_station={{ station.id }}&start_date={{ nextpass.tr|date:"Y/m/d H:i" }}&end_date={{ nextpass.ts|date:"Y/m/d H:i" }}"
+                   class="btn btn-default">schedule</a>
+              {% else %}
+                <a href="#" class="btn btn-default" disabled>schedule</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if request.user == station.owner %}
+    <!-- Station Modal -->
+    {% include 'includes/station_edit.html' %}
+  {% endif %}
+  {% include 'includes/satellite.html' %}
+  {% include 'includes/legend.html' %}
 {% endblock content %}
 
 {% block javascript %}
+  <script src="{% static 'lib/urijs/src/URI.min.js' %}"></script>
+  <script src="{% static 'lib/mapbox.js/mapbox.js' %}"></script>
   <script src="{% static 'js/station_view.js' %}"></script>
+  <script src="{% static 'js/gridsquare.js' %}"></script>
+  <script src="{% static 'js/satellite.js' %}"></script>
+  <script src="{% static 'js/polar.js' %}"></script>
 {% endblock javascript %}

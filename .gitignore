@@ -2,8 +2,8 @@
 *.py[cod]
 *.pyc
 __pycache__
-env
 .env
+.cache
 
 # Logs
 *.log
@@ -14,16 +14,16 @@ pip-log.txt
 .tox
 nosetests.xml
 
-# Vim
-*~
-*.swp
-*.swo
-
 # Sqlite
 *.db
 *.sqlite
 *.sqlite3
 
-# Media
+# Media & Static
 media
-staticfiles
+/staticfiles/*
+node_modules
+yarn-error.log
+
+# Celery
+celerybeat-schedule

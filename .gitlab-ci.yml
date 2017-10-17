@@ -1,0 +1,39 @@
+image: registry.gitlab.com/librespacefoundation/satnogs/satnogs-network:latest
+
+stages:
+  - test
+  - deploy
+
+test:
+  stage: test
+  script:
+    - pip install --no-cache-dir --require-hashes --no-deps -r requirements/dev.txt
+    - cp env-dist .env
+    - flake8 .
+    - pytest
+    - eslint 'network/static/js/*.js'
+    - stylelint 'network/static/css/*.css'
+
+stage:
+  stage: deploy
+  environment: stage
+  only:
+   - dev
+  script:
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" >> ~/.ssh/id_rsa
+    - chmod -R u=rwX,o=,g= ~/.ssh/
+    - echo "$SSH_SERVER_HOSTKEY" > ~/.ssh/known_hosts
+    - git push -u ssh://$SERVER_USER@$SERVER_HOST$SERVER_PATH dev
+
+production:
+  stage: deploy
+  environment: production
+  only:
+   - master
+  script:
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" >> ~/.ssh/id_rsa
+    - chmod -R u=rwX,o=,g= ~/.ssh/
+    - echo "$SSH_SERVER_HOSTKEY" > ~/.ssh/known_hosts
+    - git push -u ssh://$SERVER_USER@$SERVER_HOST$SERVER_PATH master

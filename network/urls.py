@@ -1,24 +1,32 @@
-from __future__ import unicode_literals
-
 from django.conf import settings
-from django.conf.urls import patterns, include, url
-from django.conf.urls.static import static
-
+from django.conf.urls import include, url
 from django.contrib import admin
+from django.views.static import serve
 
+from avatar import urls as avatar_urls
+from allauth import urls as allauth_urls
 
-urlpatterns = patterns(
-    '',
+from network.base.urls import base_urlpatterns
+from network.users.urls import users_urlpatterns
+from network.api.urls import api_urlpatterns
 
+handler404 = 'network.base.views.custom_404'
+handler500 = 'network.base.views.custom_500'
+
+urlpatterns = [
     # Base urls
-    url(r'^', include('network.base.urls', namespace='base')),
+    url(r'^', include(base_urlpatterns)),
 
-    url(r'^admin/', include(admin.site.urls)),
-    url(r'^users/', include('network.users.urls', namespace='users')),
-    url(r'^accounts/', include('allauth.urls')),
-    url(r'^avatar/', include('avatar.urls')),
+    url(r'^admin/', admin.site.urls),
+    url(r'^users/', include(users_urlpatterns)),
+    url(r'^accounts/', include(allauth_urls)),
+    url(r'^avatar/', include(avatar_urls)),
 
-    url(r'^api/', include('network.api.urls'))
-)
+    url(r'^api/', include(api_urlpatterns))
+]
 
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+if settings.DEBUG:
+    urlpatterns += [
+        url(r'^media/(?P<path>.*)$', serve,
+            {'document_root': settings.MEDIA_ROOT}),
+    ]
