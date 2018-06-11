@@ -13,6 +13,7 @@ pip-log.txt
 .coverage
 .tox
 nosetests.xml
+.pytest_cache
 
 # Sqlite
 *.db
@@ -24,6 +25,8 @@ media
 /staticfiles/*
 node_modules
 yarn-error.log
+*.css.map
+.sass-cache
 
 # Celery
 celerybeat-schedule

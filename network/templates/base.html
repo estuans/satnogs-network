@@ -11,7 +11,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     {% compress css %}
       <link rel="stylesheet" href="{% static 'lib/bootstrap/dist/css/bootstrap.min.css' %}">
-      <link rel="stylesheet" href="{% static 'css/app.css' %}">
+      <link rel="stylesheet" type="text/scss" href="{% static 'css/app.scss' %}">
       {% block css %}
       {% endblock %}
     {% endcompress %}
@@ -20,12 +20,12 @@
 
   </head>
 
-  <body>
+  <body {% block body-class %}{% endblock %}>
     {{ stage_notice }}
     {% block prenav-content %}{% endblock %}
 
     <div class="container">
-      <nav class="navbar navbar-default" role="navigation" id="main-navbar">
+      <nav class="navbar navbar-default navbar-main" role="navigation">
         <div class="container-fluid">
         <!-- Brand and toggle get grouped for better mobile display -->
           <div class="navbar-header">
@@ -36,7 +36,7 @@
               <span class="icon-bar"></span>
             </button>
             <a class="navbar-brand" href="{% url 'base:home' %}">
-              <img id="navbar-logo" src="{% static 'img/satnogs_net.png' %}" alt="SatNOGS net">
+              <img class="navbar-logo" src="{% static 'img/satnogs_net.png' %}" alt="SatNOGS net">
             </a>
           </div>
 
@@ -51,14 +51,26 @@
             </ul>
             <ul class="nav navbar-nav navbar-right">
               {% if request.user.is_authenticated %}
+                {% if owner_vetting_count %}
+                  <li data-toggle="tooltip"
+                      data-placement="bottom"
+                      title="{{ owner_vetting_count }} observations need vetting">
+                    <a href="{% url 'base:observations_list' %}?observer={{ request.user.id }}&future=0&good=0&bad=0&unvetted=1&failed=0">
+                      <span class="glyphicon glyphicon-check" aria-hidden="true"></span>
+                      <span class="badge badge-unvetted">{{ owner_vetting_count }}</span>
+                    </a>
+                  </li>
+                {% endif %}
               <li class="dropdown">
                 <a href="#"
                    class="dropdown-toggle"
-                   data-toggle="dropdown">{% avatar request.user 35 %} {{ request.user.username }}
-                   <span class="caret"></span>
+                   data-toggle="dropdown">
+                  {% avatar request.user 35 %}
+                  <span class="caret"></span>
                 </a>
                 <ul class="dropdown-menu" role="menu">
-                    <li><a href="{% url 'users:view_user' username=request.user.username %}">My Profile</a></li>
+                    <li><a href="{% url 'users:view_user' username=request.user.username %}">Dashboard</a></li>
+                    <li role="separator" class="divider"></li>
                     {% if request.user.is_superuser %}
                       <li><a href="{% url 'base:settings_site' %}">Site Settings</a></li>
                     {% endif %}
@@ -98,24 +110,26 @@
 
     {% block modal %}{% endblock modal %}
 
-    <footer>
-      <div class="container">
-        <hr>
-        <div class="row">
-          <div class="col-md-6">
-            <span class="glyphicon glyphicon-copyright-mark" aria-hidden="true"></span> 2014<span id="copy"></span>
-            <a href="http://librespacefoundation.org/" target="_blank">Libre Space Foundation</a>.<br>
-            <span class="glyphicon glyphicon-cloud" aria-hidden="true"></span>
-            Observation data are freely distributed under the
-            <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA</a> license.
-          </div>
-          <div class="col-md-6 text-right footer-options">
-            <a href="https://satnogs.org/" target="_blank">SatNOGS</a> |
-            <a href="#top">Back to top</a>
+    {% block footer %}
+      <footer>
+        <div class="container">
+          <hr>
+          <div class="row">
+            <div class="col-md-6">
+              <span class="glyphicon glyphicon-copyright-mark" aria-hidden="true"></span> 2014<span id="copy"></span>
+              <a href="https://libre.space/" target="_blank">Libre Space Foundation</a>.<br>
+              <span class="glyphicon glyphicon-cloud" aria-hidden="true"></span>
+              Observation data are freely distributed under the
+              <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank">CC BY-SA</a> license.
+            </div>
+            <div class="col-md-6 text-right footer-options">
+              <a href="https://satnogs.org/" target="_blank">SatNOGS</a> |
+              <a href="#top">Back to top</a>
+            </div>
           </div>
         </div>
-      </div>
-    </footer>
+      </footer>
+    {% endblock %}
 
     {% compress js %}
       <script src="{% static 'lib/jquery/dist/jquery.min.js' %}"></script>
@@ -123,8 +137,7 @@
       <script src="{% static 'js/app.js' %}"></script>
       {% block javascript %}
       {% endblock javascript %}
-
-      {{ analytics_code }}
     {% endcompress %}
+    {{ analytics_code }}
 </body>
 </html>

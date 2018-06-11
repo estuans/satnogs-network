@@ -1,0 +1,43 @@
+.satellite-info {
+    margin-bottom: 20px;
+}
+
+#SatelliteModal li {
+    margin-bottom: 5px;
+}
+
+.satellite-title {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-bottom: 5px;
+}
+
+.satellite-names {
+    margin-bottom: 5px;
+}
+
+.satellite-img-full {
+    width: 100%;
+    max-width: 300px;
+    border-radius: 5px;
+}
+
+.satellite-success {
+    width: 100px;
+    margin-top: 20px;
+}
+
+.tab-content {
+    // Overwrite display:none of bootstrap tab panel
+
+    > .tab-pane {
+        visibility: hidden;
+        display: inline;
+        position: fixed;
+    }
+
+    > .active {
+        visibility: visible;
+        position: initial;
+    }
+}

@@ -3,40 +3,41 @@ import ephem
 import math
 from operator import itemgetter
 from datetime import datetime, timedelta
-from StringIO import StringIO
 
+from django.db.models import Count
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.management import call_command
 from django.core.urlresolvers import reverse
 from django.http import JsonResponse, HttpResponseNotFound, HttpResponseServerError, HttpResponse
 from django.shortcuts import get_object_or_404, render, redirect
 from django.utils.timezone import now, make_aware, utc
 from django.utils.text import slugify
-from django.views.decorators.http import require_POST
 from django.views.generic import ListView
 
 from rest_framework import serializers, viewsets
-
 from network.base.models import (Station, Transmitter, Observation,
-                                 Satellite, Antenna, Tle, Rig)
+                                 Satellite, Antenna, Tle, Rig, StationStatusLog)
+from network.users.models import User
 from network.base.forms import StationForm, SatelliteFilterForm
-from network.base.decorators import admin_required
+from network.base.decorators import admin_required, ajax_required
 from network.base.helpers import calculate_polar_data, resolve_overlaps
+from network.base.perms import schedule_perms, delete_perms, vet_perms
+from network.base.tasks import update_all_tle, fetch_data
 
 
 class StationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Station
-        fields = ('name', 'lat', 'lng')
+        fields = ('name', 'lat', 'lng', 'id')
 
 
 class StationAllView(viewsets.ReadOnlyModelViewSet):
-    queryset = Station.objects.filter(active=True)
+    queryset = Station.objects.exclude(status=0)
     serializer_class = StationSerializer
 
 
+@ajax_required
 def satellite_position(request, sat_id):
     sat = get_object_or_404(Satellite, norad_cat_id=sat_id)
     try:
@@ -45,7 +46,7 @@ def satellite_position(request, sat_id):
             str(sat.latest_tle.tle1),
             str(sat.latest_tle.tle2)
         )
-    except:
+    except (ValueError, AttributeError):
         data = {}
     else:
         now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -59,21 +60,11 @@ def satellite_position(request, sat_id):
 
 def index(request):
     """View to render index page."""
-    observations = Observation.objects.all()
-    try:
-        featured_station = Station.objects.filter(active=True).latest('featured_date')
-    except Station.DoesNotExist:
-        featured_station = None
+    if request.user.is_authenticated():
+        return redirect(reverse('users:view_user', kwargs={"username": request.user.username}))
 
-    ctx = {
-        'latest_observations': observations.filter(end__lt=now()).order_by('-id')[:10],
-        'scheduled_observations': observations.filter(end__gte=now()),
-        'featured_station': featured_station,
-        'mapbox_id': settings.MAPBOX_MAP_ID,
-        'mapbox_token': settings.MAPBOX_TOKEN
-    }
-
-    return render(request, 'base/home.html', ctx)
+    return render(request, 'base/home.html', {'mapbox_id': settings.MAPBOX_MAP_ID,
+                                              'mapbox_token': settings.MAPBOX_TOKEN})
 
 
 def custom_404(request):
@@ -97,21 +88,10 @@ def robots(request):
 def settings_site(request):
     """View to render settings page."""
     if request.method == 'POST':
-        if request.POST['fetch']:
-            try:
-                data_out = StringIO()
-                tle_out = StringIO()
-                call_command('fetch_data', stdout=data_out)
-                call_command('update_all_tle', stdout=tle_out)
-                request.session['settings_out'] = data_out.getvalue() + tle_out.getvalue()
-            except:
-                messages.error(request, 'fetch command failed.')
-        return redirect(reverse('base:settings_site'))
-
-    fetch_out = request.session.get('settings_out', False)
-    if fetch_out:
-        del request.session['settings_out']
-        return render(request, 'base/settings_site.html', {'fetch_data': fetch_out})
+        fetch_data.delay()
+        update_all_tle.delay()
+        messages.success(request, 'Data fetching task was triggered successfully!')
+        return redirect(reverse('users:view_user', kwargs={"username": request.user.username}))
     return render(request, 'base/settings_site.html')
 
 
@@ -127,9 +107,13 @@ class ObservationListView(ListView):
     def get_queryset(self):
         """
         Optionally filter based on norad get argument
-        Optionally filter based on good/bad/unvetted
+        Optionally filter based on future/good/bad/unvetted/failed
         """
         norad_cat_id = self.request.GET.get('norad', '')
+        observer = self.request.GET.get('observer', '')
+        station = self.request.GET.get('station', '')
+        self.filtered = False
+
         bad = self.request.GET.get('bad', '1')
         if bad == '0':
             bad = False
@@ -145,19 +129,47 @@ class ObservationListView(ListView):
             unvetted = False
         else:
             unvetted = True
-
-        if norad_cat_id == '':
-            observations = Observation.objects.all()
+        future = self.request.GET.get('future', '1')
+        if future == '0':
+            future = False
         else:
-            observations = Observation.objects.filter(
+            future = True
+        failed = self.request.GET.get('failed', '1')
+        if failed == '0':
+            failed = False
+        else:
+            failed = True
+
+        if False in (bad, good, unvetted, future, failed):
+            self.filtered = True
+
+        observations = Observation.objects.all()
+        if not norad_cat_id == '':
+            observations = observations.filter(
                 satellite__norad_cat_id=norad_cat_id)
+            self.filtered = True
+        if not observer == '':
+            observations = observations.filter(
+                author=observer)
+            self.filtered = True
+        if not station == '':
+            observations = observations.filter(
+                ground_station_id=station)
+            self.filtered = True
 
         if not bad:
-            observations = observations.exclude(vetted_status='no_data')
+            observations = observations.exclude(vetted_status='bad')
         if not good:
-            observations = observations.exclude(vetted_status='verified')
+            observations = observations.exclude(vetted_status='good')
+        if not failed:
+            observations = observations.exclude(vetted_status='failed')
         if not unvetted:
-            observations = observations.exclude(vetted_status='unknown')
+            observations = observations.exclude(vetted_status='unknown',
+                                                id__in=(o.id for
+                                                        o in observations if o.is_past))
+        if not future:
+            observations = observations.exclude(id__in=(o.id for
+                                                        o in observations if o.is_future))
         return observations
 
     def get_context_data(self, **kwargs):
@@ -166,18 +178,30 @@ class ObservationListView(ListView):
         """
         context = super(ObservationListView, self).get_context_data(**kwargs)
         context['satellites'] = Satellite.objects.all()
+        context['authors'] = User.objects.all().order_by('first_name', 'last_name', 'username')
+        context['stations'] = Station.objects.all().order_by('id')
         norad_cat_id = self.request.GET.get('norad', None)
+        observer = self.request.GET.get('observer', None)
+        station = self.request.GET.get('station', None)
+        context['future'] = self.request.GET.get('future', '1')
         context['bad'] = self.request.GET.get('bad', '1')
         context['good'] = self.request.GET.get('good', '1')
         context['unvetted'] = self.request.GET.get('unvetted', '1')
+        context['failed'] = self.request.GET.get('failed', '1')
+        context['filtered'] = self.filtered
         if norad_cat_id is not None and norad_cat_id != '':
             context['norad'] = int(norad_cat_id)
+        if observer is not None and observer != '':
+            context['observer_id'] = int(observer)
+        if station is not None and station != '':
+            context['station_id'] = int(station)
         if 'scheduled' in self.request.session:
             context['scheduled'] = self.request.session['scheduled']
             try:
                 del self.request.session['scheduled']
             except KeyError:
                 pass
+        context['can_schedule'] = schedule_perms(self.request.user)
         return context
 
 
@@ -185,6 +209,12 @@ class ObservationListView(ListView):
 def observation_new(request):
     """View for new observation"""
     me = request.user
+
+    can_schedule = schedule_perms(me)
+    if not can_schedule:
+        messages.error(request, 'You don\'t have permissions to schedule observations')
+        return redirect(reverse('base:observations_list'))
+
     if request.method == 'POST':
         sat_id = request.POST.get('satellite')
         trans_id = request.POST.get('transmitter')
@@ -195,14 +225,18 @@ def observation_new(request):
             messages.error(request, 'Please use the datetime dialogs to submit valid values.')
             return redirect(reverse('base:observation_new'))
 
-        if (end_time - start_time) > timedelta(minutes=int(settings.DATE_MAX_RANGE)):
+        if (end_time - start_time) > timedelta(minutes=settings.OBSERVATION_DATE_MAX_RANGE):
             messages.error(request, 'Please use the datetime dialogs to submit valid timeframe.')
+            return redirect(reverse('base:observation_new'))
+
+        if (start_time < datetime.now()):
+            messages.error(request, 'Please schedule an observation that begins in the future')
             return redirect(reverse('base:observation_new'))
 
         start = make_aware(start_time, utc)
         end = make_aware(end_time, utc)
         sat = Satellite.objects.get(norad_cat_id=sat_id)
-        trans = Transmitter.objects.get(id=trans_id)
+        trans = Transmitter.objects.get(uuid=trans_id)
         tle = Tle.objects.get(id=sat.latest_tle.id)
 
         sat_ephem = ephem.readtle(str(sat.latest_tle.tle0),
@@ -285,17 +319,18 @@ def observation_new(request):
     return render(request, 'base/observation_new.html',
                   {'satellites': satellites,
                    'transmitters': transmitters, 'obs_filter': obs_filter,
-                   'date_min_start': settings.DATE_MIN_START,
-                   'date_min_end': settings.DATE_MIN_END,
-                   'date_max_range': settings.DATE_MAX_RANGE})
+                   'date_min_start': settings.OBSERVATION_DATE_MIN_START,
+                   'date_min_end': settings.OBSERVATION_DATE_MIN_END,
+                   'date_max_range': settings.OBSERVATION_DATE_MAX_RANGE})
 
 
+@ajax_required
 def prediction_windows(request, sat_id, transmitter, start_date, end_date,
                        station_id=None):
     try:
         sat = Satellite.objects.filter(transmitters__alive=True) \
             .filter(status='alive').distinct().get(norad_cat_id=sat_id)
-    except:
+    except Satellite.DoesNotExist:
         data = {
             'error': 'You should select a Satellite first.'
         }
@@ -307,15 +342,15 @@ def prediction_windows(request, sat_id, transmitter, start_date, end_date,
             str(sat.latest_tle.tle1),
             str(sat.latest_tle.tle2)
         )
-    except:
+    except (ValueError, AttributeError):
         data = {
             'error': 'No TLEs for this satellite yet.'
         }
         return JsonResponse(data, safe=False)
 
     try:
-        downlink = Transmitter.objects.get(id=int(transmitter)).downlink_low
-    except:
+        downlink = Transmitter.objects.get(uuid=transmitter).downlink_low
+    except Transmitter.DoesNotExist:
         data = {
             'error': 'You should select a Transmitter first.'
         }
@@ -329,7 +364,7 @@ def prediction_windows(request, sat_id, transmitter, start_date, end_date,
     if station_id:
         stations = stations.filter(id=station_id)
     for station in stations:
-        if not station.online:
+        if not schedule_perms(request.user, station):
             continue
 
         # Skip if this station is not capable of receiving the frequency
@@ -403,7 +438,7 @@ def prediction_windows(request, sat_id, transmitter, start_date, end_date,
                                     'end': window_end.strftime("%Y-%m-%d %H:%M:%S.%f"),
                                     'az_start': azr
                                 })
-                        except:
+                        except IndexError:
                             pass
                 else:
                     # window start outside of window bounds
@@ -422,26 +457,9 @@ def observation_view(request, id):
     """View for single observation page."""
     observation = get_object_or_404(Observation, id=id)
 
-    # This context flag will determine if vet buttons appeas for the observation.
-    # That includes observer, station owner involved, staff.
-    is_vetting_user = False
-    if request.user.is_authenticated():
-        if observation.author == request.user or request.user.is_staff:
-            is_vetting_user = True
-        if Station.objects.filter(owner=request.user). \
-           filter(id=observation.ground_station.id).count():
-            is_vetting_user = True
+    can_vet = vet_perms(request.user, observation)
 
-    # This context flag will determine if a delete button appears for the observation.
-    # That includes observer, superusers and people with certain permission.
-    is_deletable = False
-    if request.user.is_authenticated():
-        if observation.author == request.user and observation.is_deletable_before_start:
-            is_deletable = True
-        if request.user.has_perm('base.delete_observation') and observation.is_deletable_after_end:
-            is_deletable = True
-        if request.user.is_superuser:
-            is_deletable = True
+    can_delete = delete_perms(request.user, observation)
 
     if settings.ENVIRONMENT == 'production':
         discuss_slug = 'https://community.libre.space/t/observation-{0}-{1}-{2}' \
@@ -457,31 +475,25 @@ def observation_view(request, id):
         apiurl = '{0}.json'.format(discuss_slug)
         try:
             urllib2.urlopen(apiurl).read()
-        except:
+        except urllib2.URLError:
             has_comments = False
 
         return render(request, 'base/observation_view.html',
                       {'observation': observation, 'has_comments': has_comments,
                        'discuss_url': discuss_url, 'discuss_slug': discuss_slug,
-                       'is_vetting_user': is_vetting_user, 'is_deletable': is_deletable})
+                       'can_vet': can_vet, 'can_delete': can_delete})
 
     return render(request, 'base/observation_view.html',
-                  {'observation': observation, 'is_vetting_user': is_vetting_user,
-                   'is_deletable': is_deletable})
+                  {'observation': observation, 'can_vet': can_vet,
+                   'can_delete': can_delete})
 
 
 @login_required
 def observation_delete(request, id):
     """View for deleting observation."""
     observation = get_object_or_404(Observation, id=id)
-    is_deletable = False
-    if observation.author == request.user and observation.is_deletable_before_start:
-        is_deletable = True
-    if request.user.has_perm('base.delete_observation') and observation.is_deletable_after_end:
-        is_deletable = True
-    if request.user.is_superuser:
-        is_deletable = True
-    if is_deletable:
+    can_delete = delete_perms(request.user, observation)
+    if can_delete:
         observation.delete()
         messages.success(request, 'Observation deleted successfully.')
     else:
@@ -490,35 +502,35 @@ def observation_delete(request, id):
 
 
 @login_required
-def observation_verify(request, id):
-    me = request.user
+def observation_vet(request, id, status):
     observation = get_object_or_404(Observation, id=id)
-    observation.vetted_status = 'verified'
-    observation.vetted_user = me
-    observation.vetted_datetime = datetime.today()
-    observation.save(update_fields=['vetted_status', 'vetted_user', 'vetted_datetime'])
-    return redirect(reverse('base:observation_view', kwargs={'id': observation.id}))
-
-
-@login_required
-def observation_mark_bad(request, id):
-    me = request.user
-    observation = get_object_or_404(Observation, id=id)
-    observation.vetted_status = 'no_data'
-    observation.vetted_user = me
-    observation.vetted_datetime = datetime.today()
-    observation.save(update_fields=['vetted_status', 'vetted_user', 'vetted_datetime'])
+    can_vet = vet_perms(request.user, observation)
+    if status in ['good', 'bad', 'failed', 'unknown'] and can_vet:
+        observation.vetted_status = status
+        observation.vetted_user = request.user
+        observation.vetted_datetime = now()
+        observation.save(update_fields=['vetted_status', 'vetted_user', 'vetted_datetime'])
+        if not status == 'unknown':
+            messages.success(request, 'Observation vetted successfully. [<a href="{0}">Undo</a>]'
+                             .format(reverse('base:observation_vet',
+                                             kwargs={'id': observation.id, 'status': 'unknown'})))
+    else:
+        messages.error(request, 'Permission denied.')
     return redirect(reverse('base:observation_view', kwargs={'id': observation.id}))
 
 
 def stations_list(request):
     """View to render Stations page."""
-    stations = Station.objects.all()
+    stations = Station.objects.annotate(total_obs=Count('observations'))
     form = StationForm()
     antennas = Antenna.objects.all()
+    online = stations.filter(status=2).count()
+    testing = stations.filter(status=1).count()
 
     return render(request, 'base/stations.html',
-                  {'stations': stations, 'form': form, 'antennas': antennas})
+                  {'stations': stations, 'form': form, 'antennas': antennas,
+                   'online': online, 'testing': testing,
+                   'mapbox_id': settings.MAPBOX_MAP_ID, 'mapbox_token': settings.MAPBOX_TOKEN})
 
 
 def station_view(request, id):
@@ -529,10 +541,65 @@ def station_view(request, id):
     rigs = Rig.objects.all()
     unsupported_frequencies = request.GET.get('unsupported_frequencies', '0')
 
+    can_schedule = schedule_perms(request.user, station)
+
+    # Calculate uptime
+    uptime = '-'
+    try:
+        latest = StationStatusLog.objects.filter(station=station)[0]
+    except IndexError:
+        latest = None
+    if latest:
+        if latest.status:
+            try:
+                offline = StationStatusLog.objects.filter(station=station, status=0)[0]
+                uptime = latest.changed - offline.changed
+            except IndexError:
+                uptime = now() - latest.changed
+            uptime = str(uptime).split('.')[0]
+
+    if request.user.is_authenticated():
+        if request.user == station.owner:
+            wiki_help = ('<a href="{0}" target="_blank" class="wiki-help"><span class="glyphicon '
+                         'glyphicon-question-sign" aria-hidden="true"></span>'
+                         '</a>'.format(settings.WIKI_STATION_URL))
+            if station.is_offline:
+                messages.error(request, ('Your Station is offline. You should make '
+                                         'sure it can successfully connect to the Network API. '
+                                         '{0}'.format(wiki_help)))
+            if station.is_testing:
+                messages.warning(request, ('Your Station is in Testing mode. Once you are sure '
+                                           'it returns good observations you can put it online. '
+                                           '{0}'.format(wiki_help)))
+
+    return render(request, 'base/station_view.html',
+                  {'station': station, 'form': form, 'antennas': antennas,
+                   'mapbox_id': settings.MAPBOX_MAP_ID,
+                   'mapbox_token': settings.MAPBOX_TOKEN,
+                   'rigs': rigs, 'can_schedule': can_schedule,
+                   'unsupported_frequencies': unsupported_frequencies,
+                   'uptime': uptime})
+
+
+def station_log(request, id):
+    """View for single station status log."""
+    station = get_object_or_404(Station, id=id)
+    station_log = StationStatusLog.objects.filter(station=station)
+
+    return render(request, 'base/station_log.html',
+                  {'station': station, 'station_log': station_log})
+
+
+@ajax_required
+def pass_predictions(request, id):
+    """Endpoint for pass predictions"""
+    station = get_object_or_404(Station, id=id)
+    unsupported_frequencies = request.GET.get('unsupported_frequencies', '0')
+
     try:
         satellites = Satellite.objects.filter(transmitters__alive=True) \
             .filter(status='alive').distinct()
-    except:
+    except Satellite.DoesNotExist:
         pass  # we won't have any next passes to display
 
     # Load the station information and invoke ephem so we can
@@ -592,7 +659,7 @@ def station_view(request, id):
                 elevation = format(math.degrees(altt), '.0f')
                 azimuth_r = format(math.degrees(azr), '.0f')
                 azimuth_s = format(math.degrees(azs), '.0f')
-            except:
+            except TypeError:
                 break
             passid += 1
 
@@ -603,7 +670,7 @@ def station_view(request, id):
                 if (float(elevation) >= station.horizon and tr < ts):
                     valid = True
                     if tr < ephem.Date(datetime.now() +
-                                       timedelta(minutes=int(settings.DATE_MIN_START))):
+                                       timedelta(minutes=settings.OBSERVATION_DATE_MIN_START)):
                         valid = False
                     polar_data = calculate_polar_data(observer,
                                                       sat_ephem,
@@ -611,20 +678,19 @@ def station_view(request, id):
                                                       ts.datetime(), 10)
                     sat_pass = {'passid': passid,
                                 'mytime': str(observer.date),
-                                'debug': observer.next_pass(sat_ephem),
                                 'name': str(satellite.name),
                                 'id': str(satellite.id),
                                 'success_rate': str(satellite.success_rate),
                                 'unknown_rate': str(satellite.unknown_rate),
-                                'empty_rate': str(satellite.empty_rate),
+                                'bad_rate': str(satellite.bad_rate),
                                 'data_count': str(satellite.data_count),
-                                'verified_count': str(satellite.verified_count),
-                                'empty_count': str(satellite.empty_count),
+                                'good_count': str(satellite.good_count),
+                                'bad_count': str(satellite.bad_count),
                                 'unknown_count': str(satellite.unknown_count),
                                 'norad_cat_id': str(satellite.norad_cat_id),
                                 'tr': tr.datetime(),  # Rise time
                                 'azr': azimuth_r,     # Rise Azimuth
-                                'tt': tt,             # Max altitude time
+                                'tt': tt.datetime(),  # Max altitude time
                                 'altt': elevation,    # Max altitude
                                 'ts': ts.datetime(),  # Set time
                                 'azs': azimuth_s,     # Set azimuth
@@ -635,39 +701,48 @@ def station_view(request, id):
             else:
                 keep_digging = False
 
-    return render(request, 'base/station_view.html',
-                  {'station': station, 'form': form, 'antennas': antennas,
-                   'mapbox_id': settings.MAPBOX_MAP_ID,
-                   'mapbox_token': settings.MAPBOX_TOKEN,
-                   'nextpasses': sorted(nextpasses, key=itemgetter('tr')),
-                   'rigs': rigs,
-                   'unsupported_frequencies': unsupported_frequencies})
+    data = {
+        'id': id,
+        'nextpasses': sorted(nextpasses, key=itemgetter('tr'))
+    }
+
+    return JsonResponse(data, safe=False)
 
 
-@require_POST
-def station_edit(request):
+def station_edit(request, id=None):
     """Edit or add a single station."""
-    if request.POST['id']:
-        pk = request.POST.get('id')
-        station = get_object_or_404(Station, id=pk, owner=request.user)
-        form = StationForm(request.POST, request.FILES, instance=station)
-    else:
-        form = StationForm(request.POST, request.FILES)
-    if form.is_valid():
-        f = form.save(commit=False)
-        f.owner = request.user
-        f.save()
-        form.save_m2m()
-        if f.online:
-            messages.success(request, 'Successfully saved Ground Station.')
-        else:
-            messages.success(request, ('Successfully saved Ground Station. It will appear online '
-                                       'as soon as it connects with our API.'))
+    station = None
+    antennas = Antenna.objects.all()
+    rigs = Rig.objects.all()
+    if id:
+        station = get_object_or_404(Station, id=id, owner=request.user)
 
-        return redirect(reverse('base:station_view', kwargs={'id': f.id}))
+    if request.method == 'POST':
+        if station:
+            form = StationForm(request.POST, request.FILES, instance=station)
+        else:
+            form = StationForm(request.POST, request.FILES)
+        if form.is_valid():
+            f = form.save(commit=False)
+            if not station:
+                f.testing = True
+            f.owner = request.user
+            f.save()
+            form.save_m2m()
+            messages.success(request, 'Ground Station saved successfully.')
+            return redirect(reverse('base:station_view', kwargs={'id': f.id}))
+        else:
+            messages.error(request, ('Your Ground Station submission has some '
+                                     'errors. {0}').format(form.errors))
+            return render(request, 'base/station_edit.html',
+                          {'form': form, 'station': station, 'antennas': antennas, 'rigs': rigs})
     else:
-        messages.error(request, 'Your Station submission had some errors.{0}'.format(form.errors))
-        return redirect(reverse('users:view_user', kwargs={'username': request.user.username}))
+        if station:
+            form = StationForm(instance=station)
+        else:
+            form = StationForm()
+        return render(request, 'base/station_edit.html',
+                      {'form': form, 'station': station, 'antennas': antennas, 'rigs': rigs})
 
 
 @login_required
@@ -682,8 +757,8 @@ def station_delete(request, id):
 
 def satellite_view(request, id):
     try:
-        sat = get_object_or_404(Satellite, norad_cat_id=id)
-    except:
+        sat = Satellite.objects.get(norad_cat_id=id)
+    except Satellite.DoesNotExist:
         data = {
             'error': 'Unable to find that satellite.'
         }
@@ -695,8 +770,8 @@ def satellite_view(request, id):
         'names': sat.names,
         'image': sat.image,
         'success_rate': sat.success_rate,
-        'verified_count': sat.verified_count,
-        'empty_count': sat.empty_count,
+        'good_count': sat.good_count,
+        'bad_count': sat.bad_count,
         'unknown_count': sat.unknown_count,
         'data_count': sat.data_count,
     }

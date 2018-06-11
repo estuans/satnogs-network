@@ -13,6 +13,7 @@ test:
     - pytest
     - eslint 'network/static/js/*.js'
     - stylelint 'network/static/css/*.css'
+    - stylelint 'network/static/css/*.scss'
 
 stage:
   stage: deploy
@@ -24,6 +25,7 @@ stage:
     - echo "$SSH_PRIVATE_KEY" >> ~/.ssh/id_rsa
     - chmod -R u=rwX,o=,g= ~/.ssh/
     - echo "$SSH_SERVER_HOSTKEY" > ~/.ssh/known_hosts
+    - git checkout dev
     - git push -u ssh://$SERVER_USER@$SERVER_HOST$SERVER_PATH dev
 
 production:
@@ -36,4 +38,5 @@ production:
     - echo "$SSH_PRIVATE_KEY" >> ~/.ssh/id_rsa
     - chmod -R u=rwX,o=,g= ~/.ssh/
     - echo "$SSH_SERVER_HOSTKEY" > ~/.ssh/known_hosts
+    - git checkout master
     - git push -u ssh://$SERVER_USER@$SERVER_HOST$SERVER_PATH master

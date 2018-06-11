@@ -5,9 +5,13 @@
 
 {% block title %} - Observation {{ observation.id }}{% endblock %}
 
+{% block css %}
+  <link rel="stylesheet" href="{% static 'lib/jquery.json-viewer/json-viewer/jquery.json-viewer.css' %}">
+{% endblock css %}
+
 {% block content %}
   <div class="row">
-    <div class="col-md-6">
+    <div class="col-md-6 col-sm-6">
       <h2 id="observation-info"
           data-start="{{ observation.start|date:"U"}}"
           data-end="{{ observation.end|date:"U"}}">
@@ -18,8 +22,13 @@
         Timeframes are in <a href="#" data-toggle="modal" data-target="#UTCModal">UTC</a>
       </div>
     </div>
-    <div class="col-md-6 text-right">
+    <div class="col-md-6 col-sm-6 text-right hidden-xs">
       <h2>
+        {% if user.is_authenticated %}
+          <a href="#" class="btn" data-toggle="modal" data-target="#HotkeysModal">
+            <span class="glyphicon glyphicon-fire" aria-hidden="true" title="Hotkeys"></span>
+          </a>
+        {% endif %}
         {% if discuss_slug %}
           <a id="obs-discuss"
              data-slug="{{ discuss_slug }}"
@@ -29,21 +38,7 @@
             Discuss
           </a>
         {% endif %}
-        {% if observation.is_past %}
-          {% if not observation.is_vetted and is_vetting_user %}
-            <a href="{% url 'base:observation_verify' id=observation.id %}">
-              <button id="verify-data" type="button" class="btn btn-default">
-                <span class="glyphicon glyphicon-thumbs-up" aria-hidden="true"></span> Good
-              </button>
-            </a>
-            <a href="{% url 'base:observation_mark_bad' id=observation.id %}">
-              <button id="bad-data" type="button" class="btn btn-default">
-                <span class="glyphicon glyphicon-thumbs-down" aria-hidden="true"></span> Bad
-              </button>
-            </a>
-          {% endif %}
-        {% endif %}
-        {% if is_deletable %}
+        {% if can_delete %}
           <a href="{% url 'base:observation_delete' id=observation.id %}" id="obs-delete" class="btn btn-danger">
             <span class="glyphicon glyphicon-trash" aria-hidden="true" title="Delete Observation"></span>
           </a>
@@ -53,7 +48,7 @@
   </div>
 
   <div class="row">
-    <div class="col-md-4 front-border">
+    <div class="col-md-4 front-border sticky-div">
       <div class="front-line">
         <span class="label label-default">Satellite</span>
         <span class="front-data">
@@ -65,9 +60,11 @@
       <div class="front-line">
         <span class="label label-default">Station</span>
         <span class="front-data">
-          <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
-            {{ observation.ground_station.name }}
-          </a>
+          {% if observation.ground_station %}
+            <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
+              {{ observation.ground_station.id }} - {{ observation.ground_station.name }}
+            </a>
+          {% endif %}
         </span>
       </div>
       <div class="front-line">
@@ -81,27 +78,52 @@
       <div class="front-line">
         <span class="label label-default">Status</span>
         <span class="front-data">
-          {% if observation.is_verified %}
-            <span class="label label-xs label-success" aria-hidden="true"
+          {% if observation.is_vetted %}
+            <span class="label label-xs label-{{ observation.vetted_status }}" aria-hidden="true"
                   data-toggle="tooltip" data-placement="right"
-                  title="Verified good on {{ observation.vetted_datetime|date:"Y-m-d H:i:s" }} by {{ observation.vetted_user.displayname }}">Verified</span>
-          {% elif observation.is_no_data %}
-            <span class="label label-xs label-danger" aria-hidden="true"
-                  data-toggle="tooltip" data-placement="right"
-                  title="Verified bad on {{ observation.vetted_datetime|date:"Y-m-d H:i:s" }} by {{ observation.vetted_user.displayname }}">Bad</span>
+                  title="Vetted {{ observation.vetted_status }} on {{ observation.vetted_datetime|date:"Y-m-d H:i:s" }}
+                         {% if observation.vetted_user %} by {{ observation.vetted_user.displayname }}
+                         {% else %} automatically
+                         {% endif %}">{{ observation.get_vetted_status_display }}</span>
           {% elif observation.is_future %}
             <span class="label label-xs label-info" aria-hidden="true"
                   data-toggle="tooltip" data-placement="right"
                   title="This observation is in the future">Pending</span>
           {% else %}
-            <span class="label label-xs label-warning" aria-hidden="true"
+            <span class="label label-xs label-{{ observation.vetted_status }}" aria-hidden="true"
                   data-toggle="tooltip" data-placement="right"
                   title="This observation needs vetting">Unvetted</span>
+            {% if can_vet %}
+              <div class="pull-right">
+                <a href="https://wiki.satnogs.org/Operation#Rating_observations" target="_blank">
+                  <span class="glyphicon glyphicon-info-sign" aria-hidden="true"></span>
+                </a>
+                <a href="{% url 'base:observation_vet' id=observation.id status='good' %}">
+                  <button id="good-data" type="button" class="btn btn-xs btn-success" title="good" data-toggle="tooltip">
+                    <span class="glyphicon glyphicon-ok" aria-hidden="true"></span>
+                  </button>
+                </a>
+                <a href="{% url 'base:observation_vet' id=observation.id status='bad' %}">
+                  <button id="bad-data" type="button" class="btn btn-xs btn-danger" title="bad" data-toggle="tooltip">
+                    <span class="glyphicon glyphicon-remove" aria-hidden="true"></span>
+                  </button>
+                </a>
+                <a href="{% url 'base:observation_vet' id=observation.id status='failed' %}">
+                  <button id="failed-data" type="button" class="btn btn-xs btn-failed" title="failed" data-toggle="tooltip">
+                    <span class="glyphicon glyphicon-alert" aria-hidden="true"></span>
+                  </button>
+                </a>
+              </div>
+            {% endif %}
           {% endif %}
         </span>
       </div>
-    </div>
-    <div class="col-md-4 front-border">
+      <div class="front-line">
+        <span class="label label-default">Transmitter</span>
+        <span class="front-data">
+          {{ observation.transmitter.description }}
+        </span>
+      </div>
       <div class="front-line">
         <span class="label label-default">Frequency</span>
         <span class="front-data">
@@ -116,12 +138,13 @@
       </div>
       <div class="front-line">
         <span class="label label-default">Timeframe</span>
-        <span class="front-data">
-          {{ observation.start|date:"Y-m-d H:i:s" }}<br>{{ observation.end|date:"Y-m-d H:i:s" }}
+        <span class="front-data datetime-data">
+          <span class="datetime-date">{{ observation.start|date:"Y-m-d" }}</span>
+          <span class="datetime-time">{{ observation.start|date:"H:i:s" }}</span><br>
+          <span class="datetime-date">{{ observation.end|date:"Y-m-d" }}</span>
+          <span class="datetime-time">{{ observation.end|date:"H:i:s" }}</span>
         </span>
       </div>
-    </div>
-    <div class="col-md-4">
       <div class="front-line">
         <span class="label label-default">Rise</span>
         <span class="front-data">
@@ -140,42 +163,78 @@
           {{ observation.set_azimuth }}°
         </span>
       </div>
-    </div>
-  </div>
+      {% if observation.client_version %}
+        <div class="front-line">
+          <span class="label label-default">Client Version</span>
+          <span class="front-data">
+            {{ observation.client_version }}
+          </span>
+        </div>
+      {% endif %}
+      {% if observation.client_metadata %}
+        <div class="front-line">
+          <span class="label label-default">Metadata</span>
+          <span class="front-data">
+            <pre id="json-renderer" data-json="{{ observation.client_metadata }}"></pre>
+          </span>
+        </div>
+      {% endif %}
+      <div class="front-line">
+        <span class="label label-default">Polar Plot</span>
+        <span class="front-data">
+          <div id="polar_plot">
+            <svg
+                xmlns="http://www.w3.org/2000/svg" version="1.1"
+                id="polar"
+                data-tle1="{{ observation.tle.tle1 }}"
+                data-tle2="{{ observation.tle.tle2 }}"
+                data-timeframe-start="{{ observation.start|date:"c" }}"
+                data-timeframe-end="{{ observation.end|date:"c" }}"
+                data-groundstation-lat="{{ observation.ground_station.lat }}"
+                data-groundstation-lon="{{ observation.ground_station.lng }}"
+                data-groundstation-alt="{{ observation.ground_station.alt }}"
+                width="120px" height="120px"
+                viewBox="-110 -110 220 220"
+                overflow="hidden">
+                <path
+                    fill="none" stroke="black" stroke-width="1"
+                    d="M 0 -95 v 190 M -95 0 h 190"
+                    />
+                <circle
+                    fill="none" stroke="black"
+                    cx="0" cy="0" r="30"
+                    />
+                <circle
+                    fill="none" stroke="black"
+                    cx="0" cy="0" r="60"
+                    />
+                <circle
+                    fill="none" stroke="black"
+                    cx="0" cy="0" r="90"
+                    />
+                <text x="-4" y="-96">
+                    N
+                </text>
+                <text x="-4" y="105">
+                    S
+                </text>
+                <text x="96" y="4">
+                    E
+                </text>
+                <text x="-106" y="4">
+                    W
+                </text>
+            </svg>
+          </div>
+        </span>
+      </div>
 
-  <hr>
-
-  <div class="row">
-    <div class="col-md-12 observation-data" id="{{ observation.id }}"
-         data-start="{{ observation.start|date:"U" }}"
-         data-end="{{ observation.end|date:"U" }}"
-         data-groundstation="{{ observation.ground_station }}">
-      <h3>Payload</h3>
-
-      <ul class="nav nav-tabs observation-tabs" role="tablist">
-        <li role="presentation" class="active">
-          <a href="#tab-waterfall"
-             aria-controls="tab-waterfall"
-             role="tab"
-             data-toggle="tab">Waterfall
-           </a>
-        </li>
-        <li role="presentation">
-          <a href="#tab-audio"
-             aria-controls="tab-audio"
-             role="tab"
-             data-toggle="tab">Audio</a>
-        </li>
-        <li role="presentation">
-          <a href="#tab-data"
-             aria-controls="tab-data"
-             role="tab"
-             data-toggle="tab">Data</a>
-        </li>
-
-        <div class="pull-right">
-          {% if observation.payload %}
-            <a href="{{ MEDIA_URL }}{{ observation.payload }}"
+      <div class="front-line">
+        {% if observation.has_audio or observation.waterfall %}
+          <span class="label label-default">Downloads</span>
+          <span class="front-data">
+          {% if observation.has_audio %}
+            <a href="{{ observation.audio_url }}"
                target="_blank"
                download="">
               <button type="button" class="btn btn-default btn-xs">
@@ -192,66 +251,117 @@
               </button>
             </a>
           {% endif %}
-        </div>
-      </ul>
+          </span>
+        {% endif %}
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div class="col-md-12 observation-data" id="{{ observation.id }}"
+           data-start="{{ observation.start|date:"U" }}"
+           data-end="{{ observation.end|date:"U" }}"
+           data-groundstation="{{ observation.ground_station }}">
+        <ul class="nav nav-tabs observation-tabs" role="tablist">
+          <li role="presentation" class="active">
+            <a href="#tab-waterfall"
+               aria-controls="tab-waterfall"
+               role="tab"
+               data-toggle="tab">Waterfall
+             </a>
+          </li>
+          <li role="presentation">
+            <a href="#tab-audio"
+               aria-controls="tab-audio"
+               role="tab"
+               data-toggle="tab">Audio
+             </a>
+          </li>
+          <li role="presentation">
+            <a href="#tab-data"
+               aria-controls="tab-data"
+               role="tab"
+               data-toggle="tab">
+              Data
+              {% if observation.demoddata.all %}
+                <span class="badge">{{ observation.demoddata.all|length }}</span>
+              {% endif %}
+            </a>
+          </li>
+        </ul>
 
-      <div class="tab-content">
-        <div role="tabpanel" class="tab-pane active" id="tab-waterfall">
-          {% if observation.waterfall %}
-            <div id="waterfall-{{ observation.id }}" class="waterfall">
-              <img class="img-responsive waterfall" src="{{ MEDIA_URL }}{{ observation.waterfall }}" alt="waterfall">
-            </div>
-          {% else %}
-            <div class="notice">
-              Waiting for waterfall
-            </div>
-          {% endif %}
-        </div>
-        <div role="tabpanel" class="tab-pane" id="tab-audio">
-          {% if observation.payload %}
-            <div id="loading-{{ observation.id }}" class="notice">Loading audio...</div>
-            <div class="progress progress-striped active" id="progress-bar-{{ observation.id }}">
-              <div class="progress-bar progress-bar-info"></div>
-            </div>
-            <div class="wave tab-data" id="data-{{ observation.id }}"
-                 data-id="{{ observation.id }}"
-                 data-payload="{{ MEDIA_URL }}{{ observation.payload }}"></div>
-            <div id="wave-spectrogram"></div>
-            <button type="button" class="btn btn-primary btn-xs playpause">
-              <span class="glyphicon glyphicon-play"></span>
-              <span class="glyphicon glyphicon-pause"></span>
-            </button>
-            <span id="playback-time-{{ observation.id }}" class="label label-info playback-time"></span>
-          {% else %}
-            <div class="notice">
-              Waiting for audio
-            </div>
-          {% endif %}
-        </div>
-        <div role="tabpanel" class="tab-pane tab-data" id="tab-data">
-          {% if observation.demoddata.all %}
-            {% for demoddata in observation.demoddata.all %}
-              <span class="label label-default">{{ demoddata.payload_demod }}</span>
-              <div class="well well-sm data-well">
-                {% if demoddata.is_image %}
-                  <img src="{{ demoddata.payload_demod.url }}" alt="observation-{{ observation.pk }}" class="img-responsive">
-                {% else %}
-                  {{ demoddata.display_payload }}
-                {% endif %}
+        <div class="tab-content">
+          <div role="tabpanel" class="tab-pane active" id="tab-waterfall">
+            {% if observation.waterfall %}
+              <div id="waterfall-{{ observation.id }}" class="waterfall">
+                <img class="img-responsive waterfall" src="{{ MEDIA_URL }}{{ observation.waterfall }}" alt="waterfall">
               </div>
-            {% endfor %}
-          {% else %}
-            <div class="notice">
-              Waiting for demoded data
-            </div>
-          {% endif %}
+            {% else %}
+              <div class="notice">
+                Waiting for waterfall
+              </div>
+            {% endif %}
+          </div>
+          <div role="tabpanel" class="tab-pane" id="tab-audio">
+            {% if observation.has_audio %}
+              <div id="loading-{{ observation.id }}" class="notice">Loading audio...</div>
+              <div class="progress progress-striped active" id="progress-bar-{{ observation.id }}">
+                <div class="progress-bar progress-bar-info"></div>
+              </div>
+              <div class="wave tab-data" id="data-{{ observation.id }}"
+                   data-id="{{ observation.id }}"
+                   data-audio="{{ observation.audio_url }}"></div>
+              <div id="wave-spectrogram"></div>
+              <button type="button" class="btn btn-primary btn-xs playpause">
+                <span class="glyphicon glyphicon-play"></span>
+                <span class="glyphicon glyphicon-pause"></span>
+              </button>
+              <span id="playback-time-{{ observation.id }}" class="label label-info playback-time"></span>
+            {% else %}
+              <div class="notice">
+                Waiting for audio
+              </div>
+            {% endif %}
+          </div>
+          <div role="tabpanel" class="tab-pane tab-data" id="tab-data">
+            {% if observation.demoddata.all %}
+              {% for demoddata in observation.demoddata.all %}
+                <span class="label label-default data-label">{{ demoddata.payload_demod }}</span>
+                <div class="well well-sm data-well">
+                  {% if demoddata.is_image %}
+                    <img src="{{ demoddata.payload_demod.url }}" alt="observation-{{ observation.pk }}" class="img-responsive">
+                  {% else %}
+                    {{ demoddata.display_payload }}
+                  {% endif %}
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="notice">
+                Waiting for demoded data
+              </div>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>
   </div>
-
   <hr>
-
+  <div class="row visible-xs">
+    <div class="col-8-xs col-xs-offset-1">
+      {% if discuss_slug %}
+        <a id="obs-discuss"
+           data-slug="{{ discuss_slug }}"
+           href="{% if has_comments %}{{ discuss_slug }}{% else %}{{ discuss_url }}{% endif %}"
+           class="btn btn-primary" target="_blank">
+          <span class="glyphicon glyphicon-comment" aria-hidden="true"></span>
+          Discuss
+        </a>
+      {% endif %}
+      {% if can_delete %}
+        <a href="{% url 'base:observation_delete' id=observation.id %}" id="obs-delete" class="btn btn-danger">
+          <span class="glyphicon glyphicon-trash" aria-hidden="true" title="Delete Observation"></span> Delete
+        </a>
+      {% endif %}
+    </div>
+  </div>
   <div class="row tle-data">
     <div class="col-md-12">
       <h3>TLE used <small>by Celestrak</small></h3>
@@ -265,6 +375,9 @@
   <!-- Satellite Modal -->
   {% include 'includes/satellite.html' %}
 
+  <!-- Hotkeys Modal -->
+  {% include 'includes/observation-hotkeys.html' %}
+
 {% endblock content %}
 
 {% block javascript %}
@@ -272,6 +385,8 @@
   <script src="{% static 'lib/wavesurfer.js/dist/plugin/wavesurfer.spectrogram.min.js' %}"></script>
   <script src="{% static 'lib/moment/min/moment.min.js' %}"></script>
   <script src="{% static 'lib/urijs/src/URI.min.js' %}"></script>
+  <script src="{% static 'lib/jquery.json-viewer/json-viewer/jquery.json-viewer.js' %}"></script>
+  <script src="{% static 'lib/satellite.js/dist/satellite.min.js' %}"></script>
   <script src="{% static 'js/utc.js' %}"></script>
   <script src="{% static 'js/observation_view.js' %}"></script>
   <script src="{% static 'js/satellite.js' %}"></script>

@@ -129,4 +129,15 @@ $(document).ready( function(){
         $('#hoverRes').show();
         $('#schedule-observation').removeAttr('disabled');
     }
+
+    // Hotkeys bindings
+    $(document).bind('keyup', function(event){
+        if (event.which == 67) {
+            var link_calculate = $('#calculate-observation');
+            link_calculate[0].click();
+        } else if (event.which == 83) {
+            var link_schedule = $('#schedule-observation');
+            link_schedule[0].click();
+        }
+    });
 });

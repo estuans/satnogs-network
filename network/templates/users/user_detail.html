@@ -3,7 +3,9 @@
 {% load static %}
 {% load tags %}
 
-{% block title %} - User: {{ user.username }}{% endblock %}
+{% block title %}
+  {% if user == request.user %} - Dashboard{% else %} - User: {{ user.username }}{% endif %}
+{% endblock %}
 
 {% block content %}
   <div class="row">
@@ -35,40 +37,74 @@
             <th>ID</th>
             <th>Name</th>
             <th>Location</th>
-            <th>Altitude</th>
-            <th>Antenna</th>
+            <th>Total</th>
+            <th>Future</th>
+            <th>Antennas</th>
           </thead>
           <tbody>
             {% for station in stations.all %}
-              <tr>
+              <tr class="clickable-row" data-href="{% url 'base:station_view' id=station.id %}">
                 <td>
                   <a href="{% url 'base:station_view' id=station.id %}">
-                    <span class="label
-                                 {% if station.online %}
-                                   label-success
+                    <span class="label label-{{ station.get_status_display|lower }}"
+                          data-toggle="tooltip"
+                          data-placement="bottom"
+                          title="{% if station.last_seen %}
+                                   Seen {{ station.last_seen|timesince }} ago
                                  {% else %}
                                    label-danger
+                                 {% endif %}"
+                          data-toggle="tooltip"
+                          data-placement="bottom"
+                          title="{% if station.last_seen %}
+                                   Seen {{ station.last_seen|timesince }} ago
+                                 {% else %}
+                                   Never seen
                                  {% endif %}">
                       {{ station.id }}
                     </span>
                   </a>
                 </td>
                 <td>
-                  <a href="{% url 'base:station_view' id=station.id %}">
-                    {{ station.name }}
-                  </a>
+                  {{ station.name }}
                 </td>
                 {% if station.location %}
-                  <td title="{{ station.lat|floatformat:-3 }}, {{ station.lng|floatformat:-3 }}">
+                  <td title="{{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°, {{ station.qthlocator }}">
                     {{ station.location }}
                   </td>
                 {% else %}
-                  <td>{{ station.lat|floatformat:-3 }}, {{ station.lng|floatformat:-3 }}</td>
+                  <td>
+                    {% if station.qthlocator %}
+                      <span data-toggle="tooltip" data-placement="bottom"
+                            title="{{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°">
+                      {{ station.qthlocator }}
+                    {% else %}
+                      {{ station.lat|floatformat:-1 }}°, {{ station.lng|floatformat:-1 }}°
+                    {% endif %}
+                    @{{ station.alt}}m
+                  </td>
                 {% endif %}
-                <td>{{ station.alt}} m</td>
                 <td>
+                  <a href="{% url 'base:observations_list' %}?station={{ station.id }}">
+                    <span class="badge total-pill" data-toggle="tooltip" data-placement="bottom"
+                          title="{{ station.success_rate }}% Success">
+                      {{ station.observations_count }}
+                    </span>
+                  </a>
+                </td>
+                <td>
+                  <a href="{% url 'base:observations_list' %}?future=1&good=0&bad=0&unvetted=0&failed=0&station={{ station.id }}">
+                    <span class="badge badge-info">
+                      {{ station.observations_future_count }}
+                    </span>
+                  </a>
+                </td>
+                <td class="station-antennas">
                   {% for antenna in station.antenna.all %}
-                    {{ antenna.antenna_type}} on {{ antenna.frequency|frq }} ({{ antenna.band}})<br>
+                    <span class="antenna-pill" data-toggle="tooltip" data-placement="bottom"
+                          title="{{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}">
+                      {{ antenna.band}} {{ antenna.get_antenna_type_display }}
+                    </span>
                   {% endfor %}
                 </td>
               </tr>
@@ -88,9 +124,9 @@
   {% if user == request.user %}
     <div class="row">
       <div class="col-md-12">
-        <button class="btn btn-default" data-toggle="modal" data-target="#StationModal">Add Ground Station</button>
-        <!-- Station Modal -->
-        {% include 'includes/station_edit.html' %}
+        <a class="btn btn-default" href="{% url 'base:station_edit' %}">
+          <span class="glyphicon glyphicon-plus" aria-hidden="true"></span> Add Ground Station
+        </a>
       </div>
     </div>
   {% endif %}
@@ -115,21 +151,16 @@
           </thead>
           <tbody>
             {% for observation in observations.all %}
-              <tr>
+              <tr class="clickable-row" data-href="{% url 'base:observation_view' id=observation.id %}">
                 <td>
                   <a href="{% url 'base:observation_view' id=observation.id %}">
-                    <span class="label
-                               {% if observation.is_verified %}
-                                 label-success" title="There is known good data in this observation"
-                               {% elif observation.is_future %}
-                                 label-info" title="This observation is in the future"
-                               {% elif not observation.is_vetted %}
-                                 label-warning" title="There is data that needs vetting in this observation"
-                               {% else %}
-                                 label-danger" title="No good data in this observation"
-                               {% endif %}>
-                      {{ observation.id }}
-                    </span>
+                    {% if observation.is_vetted %}
+                      <span class="label label-{{observation.vetted_status }}">{{ observation.id }}</span>
+                    {% elif observation.is_future %}
+                      <span class="label label-future">{{ observation.id }}</span>
+                    {% else %}
+                      <span class="label label-unknown">{{ observation.id }}</span>
+                    {% endif %}
                   </a>
                 </td>
                 <td>
@@ -146,9 +177,11 @@
                   <span class="datetime-time">{{ observation.end|date:"H:i:s" }}</span>
                 </td>
                 <td>
-                  <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
-                    {{ observation.ground_station }}
-                  </a>
+                  {% if observation.ground_station %}
+                    <a href="{% url 'base:station_view' id=observation.ground_station.id %}">
+                      {{ observation.ground_station }}
+                    </a>
+                  {% endif %}
                 </td>
               </tr>
             {% endfor %}
@@ -164,10 +197,13 @@
     </div>
   {% endif %}
 
-  {% if user == request.user %}
+  {% if can_schedule %}
     <div class="row">
       <div class="col-md-12">
-        <a class="btn btn-default" href="{% url 'base:observation_new' %}">New Observation</a>
+        <a class="btn btn-default" href="{% url 'base:observation_new' %}">
+          <span class="glyphicon glyphicon-plus" aria-hidden="true"></span>
+          New Observation
+        </a>
       </div>
     </div>
   {% endif %}
@@ -197,6 +233,5 @@
 {% endblock content %}
 
 {% block javascript %}
-  <script src="{% static 'js/gridsquare.js' %}"></script>
   <script src="{% static 'js/satellite.js' %}"></script>
 {% endblock javascript %}

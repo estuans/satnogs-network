@@ -3,7 +3,7 @@ Contribute
 
 Thank you for your interest in contributing to SatNOGS! There are always bugs to file; bugs to fix in code; improvements to be made to the documentation; and more.
 
-The below instructions are for software developers who want to work on `satnogs-network code <http://github.com/satnogs/satnogs-network>`_.
+The below instructions are for software developers who want to work on `satnogs-network code <http://gitlab.com/librespacefoundation/satnogs/satnogs-network>`_.
 
 Git workflow
 ------------
@@ -11,7 +11,7 @@ When you want to start contributing, you should :doc:`follow the installation in
 
 #.  (Optional) Set your cloned fork to track upstream changes (changes to the main repository), then fetch and merge changes from the upstream branch::
 
-    $ git remote add --track master upstream git://github.com/satnogs/satnogs-network
+    $ git remote add --track master upstream git://gitlab.com/librespacefoundation/satnogs/satnogs-network
     $ git fetch upstream
     $ git merge upstream/master
 
@@ -51,7 +51,7 @@ When you want to start contributing, you should :doc:`follow the installation in
 
     $ git push origin my_branch
 
-#. Issue a pull request on GitHub
+#. Issue a pull request on Gitlab
 
 #. Wait to hear from one of the core developers
 
@@ -73,6 +73,27 @@ Templates
 
 satnogs-network uses `Django's template engine <https://docs.djangoproject.com/en/dev/topics/templates/>`_ templates.
 
+Frontend development
+--------------------
+
+To be able to manage the required javascript libraries, install the development dependencies with npm::
+
+  $ npm install
+
+Development tasks like the download of assets, code linting and tests are managed with gulp::
+
+  $ gulp
+
+Frontend dependencies are stored in packages.json, handled by yarn. To add a new dependency, e.g. satellite.js, call::
+
+  $ yarn add satellite.js
+
+Manually add the new required files to the list of "assets" in packages.json, then start the download with::
+
+  $ gulp assets
+
+The assets are stored in the repository, thus don't forget to create a commit after you add/update/remove dependencies.
+
 Coding Style
 ------------
 
@@ -91,9 +112,8 @@ Most important things:
 #. Don't use whitespace before or after parentheses, brackets or braces.
 #. Classes should use CamelCase naming.
 #. Functions should use lowercase naming.
-       
+
 
 What to work on
 ---------------
-You can check `opened issues <https://github.com/satnogs/satnogs-network/issues>`_. We regurarly open issues for tracking new features. You pick one and start coding.
-
+You can check `opened issues <https://gitlab.com/librespacefoundation/satnogs/satnogs-network/issues>`_. We regurarly open issues for tracking new features. You pick one and start coding.

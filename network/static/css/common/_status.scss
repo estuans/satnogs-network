@@ -1,0 +1,78 @@
+.label-good,
+.label-online {
+    background-color: #5cb85c;
+    color: white;
+}
+
+.btn-good {
+    @extend .label-good;
+
+    &:hover {
+        background-color: #449d44;
+        color: white;
+    }
+}
+
+.label-bad,
+.label-offline {
+    background-color: #d9534f;
+    color: white;
+}
+
+.btn-bad {
+    @extend .label-bad;
+
+    &:hover {
+        background-color: #c9302c;
+        color: white;
+    }
+}
+
+.label-failed {
+    background-color: #444;
+    color: white;
+}
+
+.btn-failed {
+    @extend .label-failed;
+
+    &:hover {
+        background-color: #666;
+        color: white;
+    }
+}
+
+.label-unknown,
+.label-testing,
+.badge-unvetted {
+    background-color: darkorange;
+    color: white;
+}
+
+.btn-unknown {
+    @extend .label-unknown;
+
+    &:hover {
+        background-color: orange;
+        color: white;
+    }
+}
+
+.label-future,
+.badge-info {
+    background-color: #5bc0de;
+    color: white;
+}
+
+.btn-future {
+    @extend .label-future;
+
+    &:hover {
+        background-color: #4ba0be;
+        color: white;
+    }
+}
+
+.btn-inactive {
+    filter: opacity(45%) saturate(75%);
+}

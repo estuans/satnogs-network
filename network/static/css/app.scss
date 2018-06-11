@@ -1,0 +1,20 @@
+// Partials
+@import 'partials/variables';
+@import 'partials/mixins';
+@import 'partials/fonts';
+
+// Commons blocks
+@import 'common/custom';
+@import 'common/footer';
+@import 'common/info';
+@import 'common/navbar';
+@import 'common/status';
+
+// Pages
+@import 'pages/home';
+@import 'pages/observation';
+@import 'pages/observations';
+@import 'pages/satellites';
+@import 'pages/station';
+@import 'pages/stations';
+@import 'pages/user';

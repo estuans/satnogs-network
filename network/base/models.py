@@ -1,18 +1,22 @@
 import os
 from datetime import datetime, timedelta
 from PIL import Image
+import requests
 from shortuuidfield import ShortUUIDField
 
 from django.conf import settings
+from django.core.cache import cache
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.dispatch import receiver
 from django.db import models
+from django.db.models.signals import post_save
 from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.timezone import now
 
 from network.users.models import User
 from network.base.helpers import get_apikey
+from network.base.managers import ObservationManager
 
 
 RIG_TYPES = ['Radio', 'SDR']
@@ -27,14 +31,67 @@ ANTENNA_TYPES = (
     ('quadrafilar', 'Quadrafilar'),
     ('eggbeater', 'Eggbeater'),
     ('lindenblad', 'Lindenblad'),
+    ('paralindy', 'Parasitic Lindenblad')
 )
 OBSERVATION_STATUSES = (
     ('unknown', 'Unknown'),
-    ('verified', 'Verified'),
-    ('data_not_verified', 'Has Data, Not Verified'),
-    ('no_data', 'No Data'),
+    ('good', 'Good'),
+    ('bad', 'Bad'),
+    ('failed', 'Failed'),
+)
+STATION_STATUSES = (
+    (2, 'Online'),
+    (1, 'Testing'),
+    (0, 'Offline'),
 )
 SATELLITE_STATUS = ['alive', 'dead', 're-entered']
+
+
+def _name_obs_files(instance, filename):
+    return 'data_obs/{0}/{1}'.format(instance.id, filename)
+
+
+def _name_obs_demoddata(instance, filename):
+    return 'data_obs/{0}/{1}'.format(instance.observation.id, filename)
+
+
+def _observation_post_save(sender, instance, created, **kwargs):
+    """
+    Post save Observation operations
+    * Auto vet as good obserfvation with Demod Data
+    * Mark Observations from testing stations
+    """
+    post_save.disconnect(_observation_post_save, sender=Observation)
+    if created and instance.ground_station.testing:
+        instance.testing = True
+        instance.save()
+    if instance.has_demoddata:
+        instance.vetted_status = 'good'
+        instance.vetted_datetime = now()
+        instance.save()
+    post_save.connect(_observation_post_save, sender=Observation)
+
+
+def _station_post_save(sender, instance, created, **kwargs):
+    """
+    Post save Station operations
+    * Store current status
+    """
+    post_save.disconnect(_station_post_save, sender=Station)
+    if not created:
+        current_status = instance.status
+        if instance.is_offline:
+            instance.status = 0
+        elif instance.testing:
+            instance.status = 1
+        else:
+            instance.status = 2
+        instance.save()
+        if instance.status != current_status:
+            StationStatusLog.objects.create(station=instance, status=instance.status)
+    else:
+        StationStatusLog.objects.create(station=instance, status=instance.status)
+    post_save.connect(_station_post_save, sender=Station)
 
 
 class Rig(models.Model):
@@ -47,6 +104,7 @@ class Rig(models.Model):
 
 
 class Mode(models.Model):
+    """Model for Modes."""
     name = models.CharField(max_length=10, unique=True)
 
     def __unicode__(self):
@@ -74,10 +132,10 @@ class Station(models.Model):
     name = models.CharField(max_length=45)
     image = models.ImageField(upload_to='ground_stations', blank=True)
     alt = models.PositiveIntegerField(help_text='In meters above ground')
-    lat = models.FloatField(validators=[MaxValueValidator(90),
-                                        MinValueValidator(-90)])
-    lng = models.FloatField(validators=[MaxValueValidator(180),
-                                        MinValueValidator(-180)])
+    lat = models.FloatField(validators=[MaxValueValidator(90), MinValueValidator(-90)],
+                            help_text='eg. 38.01697')
+    lng = models.FloatField(validators=[MaxValueValidator(180), MinValueValidator(-180)],
+                            help_text='eg. 23.7314')
     qthlocator = models.CharField(max_length=255, blank=True)
     location = models.CharField(max_length=255, blank=True)
     antenna = models.ManyToManyField(Antenna, blank=True,
@@ -86,16 +144,17 @@ class Station(models.Model):
                                                 'target="_blank">SatNOGS Team</a>'))
     featured_date = models.DateField(null=True, blank=True)
     created = models.DateTimeField(auto_now_add=True)
-    active = models.BooleanField(default=True)
+    testing = models.BooleanField(default=True)
     last_seen = models.DateTimeField(null=True, blank=True)
+    status = models.IntegerField(choices=STATION_STATUSES, default=0)
     horizon = models.PositiveIntegerField(help_text='In degrees above 0', default=10)
     uuid = models.CharField(db_index=True, max_length=100, blank=True)
     rig = models.ForeignKey(Rig, related_name='ground_stations',
                             on_delete=models.SET_NULL, null=True, blank=True)
-    description = models.TextField(max_length=500, blank=True)
+    description = models.TextField(max_length=500, blank=True, help_text='Max 500 characters')
 
     class Meta:
-        ordering = ['-active', '-last_seen']
+        ordering = ['-status']
 
     def get_image(self):
         if self.image and hasattr(self.image, 'url'):
@@ -104,27 +163,54 @@ class Station(models.Model):
             return settings.STATION_DEFAULT_IMAGE
 
     @property
-    def online(self):
+    def is_online(self):
         try:
             heartbeat = self.last_seen + timedelta(minutes=int(settings.STATION_HEARTBEAT_TIME))
-            return self.active and heartbeat > now()
-        except:
+            return heartbeat > now()
+        except TypeError:
             return False
 
+    @property
+    def is_offline(self):
+        return not self.is_online
+
+    @property
+    def is_testing(self):
+        if self.is_online:
+            if self.status == 1:
+                return True
+        return False
+
     def state(self):
-        if self.online:
-            return format_html('<span style="color:green">Online</span>')
-        else:
-            return format_html('<span style="color:red">Offline</span>')
+        if not self.status:
+            return format_html('<span style="color:red;">Offline</span>')
+        if self.status == 1:
+            return format_html('<span style="color:orange;">Testing</span>')
+        return format_html('<span style="color:green">Online</span>')
 
     @property
     def success_rate(self):
-        observations = self.observations.all().count()
-        success = self.observations.exclude(payload='').count()
-        if observations:
-            return int(100 * (float(success) / float(observations)))
-        else:
-            return False
+        rate = cache.get('sat-{0}-rate'.format(self.id))
+        if not rate:
+            observations = self.observations.exclude(testing=True)
+            has_audio = observations.filter(id__in=(o.id for o in observations if o.has_audio))
+            success = has_audio.count()
+            if observations:
+                rate = int(100 * (float(success) / float(observations.count())))
+                cache.set('sat-{0}-rate'.format(self.id), rate)
+            else:
+                rate = False
+        return rate
+
+    @property
+    def observations_count(self):
+        count = self.observations.all().count()
+        return count
+
+    @property
+    def observations_future_count(self):
+        count = self.observations.is_future().count()
+        return count
 
     @property
     def apikey(self):
@@ -132,6 +218,22 @@ class Station(models.Model):
 
     def __unicode__(self):
         return "%d - %s" % (self.pk, self.name)
+
+
+post_save.connect(_station_post_save, sender=Station)
+
+
+class StationStatusLog(models.Model):
+    station = models.ForeignKey(Station, related_name='station_logs',
+                                on_delete=models.CASCADE, null=True, blank=True)
+    status = models.IntegerField(choices=STATION_STATUSES, default=0)
+    changed = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-changed']
+
+    def __unicode__(self):
+        return '{0} - {1}'.format(self.station, self.status)
 
 
 class Satellite(models.Model):
@@ -166,33 +268,33 @@ class Satellite(models.Model):
         try:
             line = self.latest_tle.tle1
             return line[65:68]
-        except:
+        except AttributeError:
             return False
 
     @property
     def tle_epoch(self):
         try:
             line = self.latest_tle.tle1
-            yd, s = line[18:32].split('.')
-            epoch = (datetime.strptime(yd, "%y%j") +
-                     timedelta(seconds=float("." + s) * 24 * 60 * 60))
-            return epoch
-        except:
+        except AttributeError:
             return False
+        yd, s = line[18:32].split('.')
+        epoch = (datetime.strptime(yd, "%y%j") +
+                 timedelta(seconds=float("." + s) * 24 * 60 * 60))
+        return epoch
 
     @property
     def data_count(self):
         return Observation.objects.filter(satellite=self).count()
 
     @property
-    def verified_count(self):
+    def good_count(self):
         data = Observation.objects.filter(satellite=self)
-        return data.filter(vetted_status='verified').count()
+        return data.filter(vetted_status='good').count()
 
     @property
-    def empty_count(self):
+    def bad_count(self):
         data = Observation.objects.filter(satellite=self)
-        return data.filter(vetted_status='no_data').count()
+        return data.filter(vetted_status='bad').count()
 
     @property
     def unknown_count(self):
@@ -202,22 +304,22 @@ class Satellite(models.Model):
     @property
     def success_rate(self):
         try:
-            return int(100 * (float(self.verified_count) / float(self.data_count)))
-        except:
+            return int(100 * (float(self.good_count) / float(self.data_count)))
+        except (ZeroDivisionError, TypeError):
             return 0
 
     @property
-    def empty_rate(self):
+    def bad_rate(self):
         try:
-            return int(100 * (float(self.empty_count) / float(self.data_count)))
-        except:
+            return int(100 * (float(self.bad_count) / float(self.data_count)))
+        except (ZeroDivisionError, TypeError):
             return 0
 
     @property
     def unknown_rate(self):
         try:
             return int(100 * (float(self.unknown_count) / float(self.data_count)))
-        except:
+        except (ZeroDivisionError, TypeError):
             return 0
 
     def __unicode__(self):
@@ -273,16 +375,24 @@ class Observation(models.Model):
     end = models.DateTimeField()
     ground_station = models.ForeignKey(Station, related_name='observations',
                                        on_delete=models.SET_NULL, null=True, blank=True)
-    payload = models.FileField(upload_to='data_payloads', blank=True, null=True)
-    waterfall = models.ImageField(upload_to='data_waterfalls', blank=True, null=True)
+    client_version = models.CharField(max_length=255, blank=True)
+    client_metadata = models.TextField(blank=True)
+    payload = models.FileField(upload_to=_name_obs_files, blank=True, null=True)
+    waterfall = models.ImageField(upload_to=_name_obs_files, blank=True, null=True)
     vetted_datetime = models.DateTimeField(null=True, blank=True)
     vetted_user = models.ForeignKey(User, related_name='observations_vetted',
                                     on_delete=models.SET_NULL, null=True, blank=True)
     vetted_status = models.CharField(choices=OBSERVATION_STATUSES,
                                      max_length=20, default='unknown')
+    testing = models.BooleanField(default=False)
     rise_azimuth = models.FloatField(blank=True, null=True)
     max_altitude = models.FloatField(blank=True, null=True)
     set_azimuth = models.FloatField(blank=True, null=True)
+    archived = models.BooleanField(default=False)
+    archive_identifier = models.CharField(max_length=255, blank=True)
+    archive_url = models.URLField(blank=True, null=True)
+
+    objects = ObservationManager.as_manager()
 
     @property
     def is_past(self):
@@ -292,34 +402,31 @@ class Observation(models.Model):
     def is_future(self):
         return self.end > now()
 
-    @property
-    def is_deletable_before_start(self):
-        deletion = self.start - timedelta(minutes=int(settings.OBSERVATION_MAX_DELETION_RANGE))
-        return deletion > now()
-
-    @property
-    def is_deletable_after_end(self):
-        deletion = self.end + timedelta(minutes=int(settings.OBSERVATION_MIN_DELETION_RANGE))
-        return deletion < now()
-
-    # this payload has been vetted good/bad by someone
+    # this payload has been vetted good/bad/failed by someone
     @property
     def is_vetted(self):
         return not self.vetted_status == 'unknown'
 
     # this payload has been vetted as good by someone
     @property
-    def is_verified(self):
-        return self.vetted_status == 'verified'
+    def is_good(self):
+        return self.vetted_status == 'good'
 
     # this payload has been vetted as bad by someone
     @property
-    def is_no_data(self):
-        return self.vetted_status == 'no_data'
+    def is_bad(self):
+        return self.vetted_status == 'bad'
+
+    # this payload has been vetted as failed by someone
+    @property
+    def is_failed(self):
+        return self.vetted_status == 'failed'
 
     @property
-    def payload_exists(self):
+    def has_audio(self):
         """Run some checks on the payload for existence of data."""
+        if self.archive_url:
+            return True
         if self.payload is None:
             return False
         if not os.path.isfile(os.path.join(settings.MEDIA_ROOT, self.payload.name)):
@@ -327,6 +434,23 @@ class Observation(models.Model):
         if self.payload.size == 0:
             return False
         return True
+
+    @property
+    def has_demoddata(self):
+        """Check if the observation has Demod Data."""
+        if self.demoddata.count():
+            return True
+        return False
+
+    @property
+    def audio_url(self):
+        if self.has_audio:
+            if self.archive_url:
+                r = requests.get(self.archive_url, allow_redirects=False)
+                return r.headers['Location']
+            else:
+                return self.payload.url
+        return ''
 
     class Meta:
         ordering = ['-start', '-end']
@@ -348,23 +472,31 @@ def observation_remove_files(sender, instance, **kwargs):
             os.remove(instance.waterfall.path)
 
 
+post_save.connect(_observation_post_save, sender=Observation)
+
+
 class DemodData(models.Model):
     observation = models.ForeignKey(Observation, related_name='demoddata',
                                     on_delete=models.CASCADE, blank=True, null=True)
-    payload_demod = models.FileField(upload_to='data_payloads', blank=True, null=True)
+    payload_demod = models.FileField(upload_to=_name_obs_demoddata, blank=True, null=True)
 
     def is_image(self):
         with open(self.payload_demod.path) as fp:
             try:
                 Image.open(fp)
-            except:
+            except (IOError, TypeError):
                 return False
             else:
                 return True
 
     def display_payload(self):
         with open(self.payload_demod.path) as fp:
-            return unicode(fp.read(), errors='replace')
+            payload = fp.read()
+            try:
+                return unicode(payload)
+            except UnicodeDecodeError:
+                data = payload.encode('hex').upper()
+                return ' '.join(data[i:i + 2] for i in xrange(0, len(data), 2))
 
 
 @receiver(models.signals.post_delete, sender=DemodData)

@@ -22,16 +22,18 @@ base_urlpatterns = ([
     url(r'^prediction_windows/(?P<sat_id>[\w.@+-]+)/(?P<transmitter>[\w.@+-]+)/'
         '(?P<start_date>.+)/(?P<end_date>.+)/$',
         views.prediction_windows, name='prediction_windows'),
-    url(r'^observation_verify/(?P<id>[0-9]+)/$', views.observation_verify,
-        name='observation_verify'),
-    url(r'^observation_mark_bad/(?P<id>[0-9]+)/$', views.observation_mark_bad,
-        name='observation_mark_bad'),
+    url(r'^pass_predictions/(?P<id>[\w.@+-]+)/$',
+        views.pass_predictions, name='pass_predictions'),
+    url(r'^observation_vet/(?P<id>[0-9]+)/(?P<status>[a-z]+)/$', views.observation_vet,
+        name='observation_vet'),
 
     # Stations
     url(r'^stations/$', views.stations_list, name='stations_list'),
     url(r'^stations/(?P<id>[0-9]+)/$', views.station_view, name='station_view'),
+    url(r'^stations/(?P<id>[0-9]+)/log/$', views.station_log, name='station_log'),
     url(r'^stations/(?P<id>[0-9]+)/delete/$', views.station_delete, name='station_delete'),
     url(r'^stations/edit/$', views.station_edit, name='station_edit'),
+    url(r'^stations/edit/(?P<id>[0-9]+)/$', views.station_edit, name='station_edit'),
     url(r'^stations_all/$', views.StationAllView.as_view({'get': 'list'}), name='stations_all'),
 
     # Satellites

@@ -28,6 +28,12 @@ class ObservationView(viewsets.ModelViewSet, mixins.UpdateModelMixin):
         return Response(status=status.HTTP_200_OK)
 
 
+class StationView(viewsets.ModelViewSet, mixins.UpdateModelMixin):
+    queryset = Station.objects.all()
+    serializer_class = serializers.StationSerializer
+    pagination_class = pagination.LinkedHeaderPageNumberPagination
+
+
 class JobView(viewsets.ReadOnlyModelViewSet):
     queryset = Observation.objects.filter(payload='')
     serializer_class = serializers.JobSerializer

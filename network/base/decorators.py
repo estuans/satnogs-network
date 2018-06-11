@@ -1,5 +1,6 @@
-from django.shortcuts import redirect
 from django.core.urlresolvers import reverse
+from django.http import HttpResponseBadRequest
+from django.shortcuts import redirect
 
 
 def admin_required(function):
@@ -10,4 +11,12 @@ def admin_required(function):
             return function(request, *args, **kwargs)
         else:
             return redirect(reverse('base:home'))
+    return wrap
+
+
+def ajax_required(function):
+    def wrap(request, *args, **kwargs):
+        if not request.is_ajax():
+            return HttpResponseBadRequest()
+        return function(request, *args, **kwargs)
     return wrap

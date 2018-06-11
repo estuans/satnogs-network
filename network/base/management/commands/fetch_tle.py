@@ -24,17 +24,17 @@ class Command(BaseCommand):
                     Satellite.objects.get(norad_cat_id=item).delete()
                     self.stdout.write('Satellite {}: deleted'.format(item))
                     continue
-                except:
+                except Satellite.DoesNotExist:
                     raise CommandError('Satellite with Identifier {} does not exist'.format(item))
 
             try:
                 sat = satellite(item)
-            except:
+            except IndexError:
                 raise CommandError('Satellite with Identifier {} does not exist'.format(item))
 
             try:
                 obj = Satellite.objects.get(norad_cat_id=item)
-            except:
+            except Satellite.DoesNotExist:
                 obj = Satellite(norad_cat_id=item)
 
             obj.name = sat.name()

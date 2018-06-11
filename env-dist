@@ -1,28 +1,13 @@
-ENVIRONMENT = 'dev'
-DEBUG = True
-
-# Email
-DEFAULT_FROM_EMAIL = 'noreply@example.com'
-ADMINS_FROM_NAME = 'Admins'
-ADMINS_FROM_EMAIL = 'noreply@example.com'
-
-# Security
-SECRET_KEY = 'changeme'
-ALLOWED_HOSTS = 'localhost'
-SITE_URL = 'http://localhost:8000'
+ENVIRONMENT='dev'
+DEBUG=True
 
 # Database
-DATABASE_URL = 'sqlite:///db.sqlite3'
+DATABASE_URL='sqlite:///db.sqlite3'
 
 # Application
-DB_API_ENDPOINT = 'https://db.satnogs.org/api/'
-STATION_HEARTBEAT_TIME = 60
+DB_API_ENDPOINT='https://db.satnogs.org/api/'
 
 # Cache
 CACHE_BACKEND = 'django.core.cache.backends.locmem.LocMemCache'
 CACHE_LOCATION = 'unique-snowflake'
 CACHE_CLIENT_CLASS = None
-
-# Celery
-CELERY_BROKER_URL = 'redis://redis:6379/0'
-CELERY_RESULT_BACKEND = 'redis://redis:6379/0'

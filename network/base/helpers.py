@@ -9,7 +9,7 @@ from django.core.cache import cache
 def get_apikey(user):
     try:
         token = Token.objects.get(user=user)
-    except:
+    except Token.DoesNotExist:
         token = Token.objects.create(user=user)
     return token
 

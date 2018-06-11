@@ -1,17 +1,22 @@
 from datetime import timedelta
 import json
+import os
+from requests.exceptions import ReadTimeout, HTTPError
 import urllib2
 
+from internetarchive import upload
 from orbit import satellite
 
 from django.conf import settings
+from django.contrib.sites.models import Site
+from django.core.cache import cache
 from django.utils.timezone import now
 
-from network.base.models import Satellite, Tle, Mode, Transmitter, Observation
+from network.base.models import Satellite, Tle, Mode, Transmitter, Observation, Station
 from network.celery import app
 
 
-@app.task
+@app.task(ignore_result=True)
 def update_all_tle():
     """Task to update all satellite TLEs"""
     satellites = Satellite.objects.exclude(manual_tle=True)
@@ -19,14 +24,14 @@ def update_all_tle():
     for obj in satellites:
         try:
             sat = satellite(obj.norad_cat_id)
-        except:
+        except IndexError:
             continue
 
         # Get latest satellite TLE and check if it changed
         tle = sat.tle()
         try:
             latest_tle = obj.latest_tle.tle1
-        except:
+        except AttributeError:
             pass
         if latest_tle == tle[1]:
             continue
@@ -34,7 +39,7 @@ def update_all_tle():
         Tle.objects.create(tle0=tle[0], tle1=tle[1], tle2=tle[2], satellite=obj)
 
 
-@app.task
+@app.task(ignore_result=True)
 def fetch_data():
     """Task to fetch all data from DB"""
     apiurl = settings.DB_API_ENDPOINT
@@ -46,7 +51,7 @@ def fetch_data():
         modes = urllib2.urlopen(modes_url).read()
         satellites = urllib2.urlopen(satellites_url).read()
         transmitters = urllib2.urlopen(transmitters_url).read()
-    except:
+    except urllib2.URLError:
         raise Exception('API is unreachable')
 
     # Fetch Modes
@@ -97,12 +102,74 @@ def fetch_data():
             new_transmitter.save()
 
 
-@app.task
+@app.task(ignore_result=True)
+def archive_audio(obs_id):
+    obs = Observation.objects.get(id=obs_id)
+    suffix = '-{0}'.format(settings.ENVIRONMENT)
+    if settings.ENVIRONMENT == 'production':
+        suffix = ''
+    identifier = 'satnogs{0}-observation-{1}'.format(suffix, obs.id)
+
+    ogg = obs.payload.path
+    filename = obs.payload.name.split('/')[-1]
+    site = Site.objects.get_current()
+    description = ('<p>Audio file from SatNOGS{0} <a href="{1}/observations/{2}">'
+                   'Observation {3}</a>.</p>').format(suffix, site.domain,
+                                                      obs.id, obs.id)
+    md = dict(collection=settings.ARCHIVE_COLLECTION,
+              title=identifier,
+              mediatype='audio',
+              licenseurl='http://creativecommons.org/licenses/by-sa/4.0/',
+              description=description)
+    try:
+        res = upload(identifier, files=[ogg], metadata=md,
+                     access_key=settings.S3_ACCESS_KEY,
+                     secret_key=settings.S3_SECRET_KEY)
+    except (ReadTimeout, HTTPError):
+        return
+    if res[0].status_code == 200:
+        obs.archived = True
+        obs.archive_url = '{0}{1}/{2}'.format(settings.ARCHIVE_URL, identifier, filename)
+        obs.archive_identifier = identifier
+        obs.save()
+        obs.payload.delete()
+
+
+@app.task(ignore_result=True)
 def clean_observations():
     """Task to clean up old observations that lack actual data."""
-    if settings.ENVIRONMENT == 'stage':
-        threshold = now() - timedelta(days=int(settings.OBSERVATION_OLD_RANGE))
-        observations = Observation.objects.filter(end__lt=threshold)
-        for obs in observations:
-            if not obs.is_verified():
+    threshold = now() - timedelta(days=int(settings.OBSERVATION_OLD_RANGE))
+    observations = Observation.objects.filter(end__lt=threshold, archived=False) \
+                                      .exclude(payload='')
+    for obs in observations:
+        if settings.ENVIRONMENT == 'stage':
+            if not obs.is_good:
                 obs.delete()
+                return
+        if os.path.isfile(obs.payload.path):
+            archive_audio.delay(obs.id)
+
+
+@app.task(ignore_result=True)
+def station_status_update():
+    """Task to update Station status."""
+    for station in Station.objects.all():
+        if station.is_offline:
+            station.status = 0
+        elif station.testing:
+            station.status = 1
+        else:
+            station.status = 2
+        station.save()
+
+
+@app.task(ignore_result=True)
+def stations_cache_rates():
+    stations = Station.objects.all()
+    for station in stations:
+        observations = station.observations.exclude(testing=True)
+        has_audio = observations.filter(id__in=(o.id for o in observations if o.has_audio))
+        success = has_audio.count()
+        if observations:
+            rate = int(100 * (float(success) / float(observations.count())))
+            cache.set('sat-{0}-rate'.format(station.id), rate, 60 * 60 * 2)

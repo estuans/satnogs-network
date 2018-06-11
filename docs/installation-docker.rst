@@ -8,9 +8,9 @@ Docker Installation
 
 #. **Build the containers**
 
-   Clone source code from the `repository <https://github.com/satnogs/satnogs-network>`_::
+   Clone source code from the `repository <https://gitlab.com/librespacefoundation/satnogs/satnogs-network>`_::
 
-     $ git clone https://github.com/satnogs/satnogs-network.git
+     $ git clone https://gitlab.com/librespacefoundation/satnogs/satnogs-network.git
      $ cd satnogs-network
 
    Set your environmental variables::

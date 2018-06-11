@@ -1,0 +1,27 @@
+.front-data {
+    float: right;
+    width: 200px;
+    display: flow-root;
+}
+
+.front-line {
+    margin-top: 12px;
+    margin-bottom: 12px;
+    clear: both;
+}
+
+.front-border {
+
+    @include large-and-up {
+        border-right: 1px solid lightgray;
+    }
+}
+
+.sticky-div {
+
+    @include large-and-up {
+        position: sticky;
+        -webkit-position: sticky; /* for safari */
+        top: 15px;
+    }
+}

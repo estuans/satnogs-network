@@ -9,7 +9,7 @@ from django.db.models.signals import post_save
 def gen_token(sender, instance, created, **kwargs):
     try:
         Token.objects.get(user=instance)
-    except:
+    except Token.DoesNotExist:
         Token.objects.create(user=instance)
 
 

@@ -1,11 +1,11 @@
-from os import getenv
+from decouple import config, Csv
 from dj_database_url import parse as db_url
 from unipath import Path
 
 ROOT = Path(__file__).parent.parent
 
-ENVIRONMENT = getenv('ENVIRONMENT', 'production')
-DEBUG = getenv('DEBUG', False)
+ENVIRONMENT = config('ENVIRONMENT', default='dev')
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 # Apps
 DJANGO_APPS = (
@@ -65,28 +65,26 @@ else:
 EMAIL_HOST = 'localhost'
 EMAIL_PORT = 25
 EMAIL_TIMEOUT = 300
-DEFAULT_FROM_EMAIL = getenv('DEFAULT_FROM_EMAIL', 'noreply@satnogs.org')
-ADMINS = (
-    (
-        getenv('ADMINS_FROM_NAME', 'SatNOGS Admins'),
-        getenv('ADMINS_FROM_EMAIL', DEFAULT_FROM_EMAIL)
-    ),
-)
+DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@satnogs.org')
+ADMINS = [
+    ('SatNOGS Admins', DEFAULT_FROM_EMAIL)
+]
 MANAGERS = ADMINS
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
 # Cache
 CACHES = {
     'default': {
-        'BACKEND': getenv('CACHE_BACKEND', 'redis_cache.RedisCache'),
-        'LOCATION': getenv('CACHE_LOCATION', 'unix://var/run/redis/redis.sock'),
+        'BACKEND': config('CACHE_BACKEND', default='redis_cache.RedisCache'),
+        'LOCATION': config('CACHE_LOCATION', default='unix://var/run/redis/redis.sock'),
         'OPTIONS': {
-            'CLIENT_CLASS': getenv('CACHE_CLIENT_CLASS', 'django_redis.client.DefaultClient'),
+            'CLIENT_CLASS': config('CACHE_CLIENT_CLASS',
+                                   default='django_redis.client.DefaultClient'),
         },
         'KEY_PREFIX': 'network-{0}'.format(ENVIRONMENT),
     }
 }
-CACHE_TTL = int(getenv('CACHE_TTL', 300))
+CACHE_TTL = config('CACHE_TTL', default=300, cast=int)
 
 # Internationalization
 TIME_ZONE = 'UTC'
@@ -104,11 +102,9 @@ TEMPLATES = [
             Path('network/templates').resolve(),
         ],
         'OPTIONS': {
-            'debug': False,
             'context_processors': [
                 'django.contrib.auth.context_processors.auth',
                 'django.template.context_processors.debug',
-                'django.template.context_processors.i18n',
                 'django.template.context_processors.media',
                 'django.template.context_processors.static',
                 'django.template.context_processors.tz',
@@ -116,10 +112,13 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'network.base.context_processors.analytics',
                 'network.base.context_processors.stage_notice',
+                'network.base.context_processors.user_processor',
             ],
             'loaders': [
-                'django.template.loaders.filesystem.Loader',
-                'django.template.loaders.app_directories.Loader',
+                ('django.template.loaders.cached.Loader', [
+                    'django.template.loaders.filesystem.Loader',
+                    'django.template.loaders.app_directories.Loader',
+                ]),
             ],
         },
 
@@ -137,11 +136,21 @@ STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
     'compressor.finders.CompressorFinder',
 )
-MEDIA_ROOT = getenv('MEDIA_ROOT', Path('media').resolve())
+MEDIA_ROOT = Path('media').resolve()
 MEDIA_URL = '/media/'
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
-STATION_DEFAULT_IMAGE = '/static/img/dish.png'
+STATION_DEFAULT_IMAGE = '/static/img/ground_station_no_image.png'
 SATELLITE_DEFAULT_IMAGE = 'https://db.satnogs.org/static/img/sat.png'
+COMPRESS_ENABLED = config('COMPRESS_ENABLED', default=False, cast=bool)
+COMPRESS_OFFLINE = config('COMPRESS_OFFLINE', default=False, cast=bool)
+COMPRESS_CACHE_BACKEND = config('COMPRESS_CACHE_BACKEND', default='default')
+COMPRESS_CSS_FILTERS = [
+    'compressor.filters.css_default.CssAbsoluteFilter',
+    'compressor.filters.cssmin.rCSSMinFilter'
+]
+COMPRESS_PRECOMPILERS = (
+    ('text/scss', 'sass --scss {infile} {outfile}'),
+)
 
 # App conf
 ROOT_URLCONF = 'network.urls'
@@ -161,9 +170,6 @@ AUTH_USER_MODEL = 'users.User'
 LOGIN_REDIRECT_URL = 'users:redirect_user'
 LOGIN_URL = 'account_login'
 AUTOSLUG_SLUGIFY_FUNCTION = 'slugify.slugify'
-if ENVIRONMENT == 'production':
-    # Disable registration
-    ACCOUNT_ADAPTER = 'network.users.adapter.NoSignupsAdapter'
 
 # Logging
 LOGGING = {
@@ -225,11 +231,11 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_SEND_TASK_ERROR_EMAILS = True
 CELERY_TASK_ALWAYS_EAGER = False
 CELERY_DEFAULT_QUEUE = 'network-{0}-queue'.format(ENVIRONMENT)
-CELERY_BROKER_URL = getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
-CELERY_RESULT_BACKEND = getenv('CELERY_RESULT_BACKEND', 'redis://redis:6379/0')
+CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://redis:6379/0')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://redis:6379/0')
 REDIS_CONNECT_RETRY = True
 CELERY_BROKER_TRANSPORT_OPTIONS = {
-    'visibility_timeout': getenv('REDIS_VISIBILITY_TIMEOUT', default=604800),
+    'visibility_timeout': config('REDIS_VISIBILITY_TIMEOUT', default=604800, cast=int),
     'fanout_prefix': True
 }
 
@@ -242,26 +248,26 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
     ),
     'DEFAULT_FILTER_BACKENDS': (
-        'rest_framework.filters.DjangoFilterBackend',
+        'django_filters.rest_framework.DjangoFilterBackend',
     )
 }
 
 # Security
-SECRET_KEY = getenv('SECRET_KEY', 'changeme')
-SECURE_HSTS_SECONDS = getenv('SECURE_HSTS_SECONDS', 31536000)
+SECRET_KEY = config('SECRET_KEY', default='changeme')
+SECURE_HSTS_SECONDS = config('SECURE_HSTS_SECONDS', default=31536000, cast=int)
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 SECURE_BROWSER_XSS_FILTER = True
-ALLOWED_HOSTS = [
-    getenv('ALLOWED_HOSTS', '*')
-]
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost', cast=Csv())
 CSP_DEFAULT_SRC = (
     "'self'",
     'https://*.mapbox.com',
+    'https://*.archive.org',
 )
 CSP_SCRIPT_SRC = (
     "'self'",
     'https://*.google-analytics.com',
+    "'unsafe-eval'",
 )
 CSP_IMG_SRC = (
     "'self'",
@@ -269,14 +275,19 @@ CSP_IMG_SRC = (
     'https://*.mapbox.com',
     'https://*.satnogs.org',
     'https://*.google-analytics.com',
+    'data:',
+    'blob:',
 )
 CSP_STYLE_SRC = (
     "'self'",
     "'unsafe-inline'",
 )
+CSP_CHILD_SRC = (
+    'blob:',
+)
 
 # Database
-DATABASE_URL = getenv('DATABASE_URL', 'sqlite:///db.sqlite3')
+DATABASE_URL = config('DATABASE_URL', default='sqlite:///db.sqlite3')
 DATABASES = {'default': db_url(DATABASE_URL)}
 DATABASES_EXTRAS = {
     'OPTIONS': {
@@ -288,38 +299,49 @@ if DATABASES['default']['ENGINE'].split('.')[-1] == 'mysql':
 
 # Mapbox API
 MAPBOX_GEOCODE_URL = 'https://api.tiles.mapbox.com/v4/geocode/mapbox.places/'
-MAPBOX_MAP_ID = getenv('MAPBOX_MAP_ID', '')
-MAPBOX_TOKEN = getenv('MAPBOX_TOKEN', '')
+MAPBOX_MAP_ID = config('MAPBOX_MAP_ID', default='')
+MAPBOX_TOKEN = config('MAPBOX_TOKEN', default='')
 
 # Metrics
 OPBEAT = {
-    'ORGANIZATION_ID': getenv('OPBEAT_ORGID', None),
-    'APP_ID': getenv('OPBEAT_APPID', None),
-    'SECRET_TOKEN': getenv('OPBEAT_SECRET', None),
+    'ORGANIZATION_ID': config('OPBEAT_ORGID', default=''),
+    'APP_ID': config('OPBEAT_APPID', default=''),
+    'SECRET_TOKEN': config('OPBEAT_SECRET', default=''),
 }
 
 # Observations settings
 # Datetimes in minutes for scheduling OPTIONS
+OBSERVATION_DATE_MIN_START = config('OBSERVATION_DATE_MIN_START', default=15, cast=int)
+OBSERVATION_DATE_MIN_END = config('OBSERVATION_DATE_MIN_START', default=75, cast=int)
 # Deletion range in minutes
+OBSERVATION_DATE_MAX_RANGE = config('OBSERVATION_DATE_MAX_RANGE', default=480, cast=int)
 # Clean up threshold in days
-DATE_MIN_START = '15'
-DATE_MIN_END = '75'
-DATE_MAX_RANGE = '480'
-OBSERVATION_MAX_DELETION_RANGE = getenv('OBSERVATION_MAX_DELETION_RANGE', 10)
-OBSERVATION_MIN_DELETION_RANGE = getenv('OBSERVATION_MIN_DELETION_RANGE', 60)
-OBSERVATION_OLD_RANGE = getenv('OBSERVATION_OLD_RANGE', 30)
+OBSERVATION_OLD_RANGE = config('OBSERVATION_OLD_RANGE', default=30, cast=int)
 
 # Station settings
 # Heartbeat for keeping a station online in minutes
+STATION_HEARTBEAT_TIME = config('STATION_HEARTBEAT_TIME', default=60, cast=int)
 # Maximum window for upcoming passes in hours
-STATION_HEARTBEAT_TIME = getenv('STATION_HEARTBEAT_TIME', 60)
-STATION_UPCOMING_END = getenv('STATION_UPCOMING_END', 12)
+STATION_UPCOMING_END = config('STATION_UPCOMING_END', default=12, cast=int)
+WIKI_STATION_URL = config('WIKI_STATION_URL', default='https://wiki.satnogs.org/')
 
 # DB API
-DB_API_ENDPOINT = getenv('DB_API_ENDPOINT', 'https://db.satnogs.org/api/')
+DB_API_ENDPOINT = config('DB_API_ENDPOINT', default='https://db.satnogs.org/api/')
 
 # ListView pagination
 ITEMS_PER_PAGE = 25
 
 # User settings
-AVATAR_GRAVATAR_DEFAULT = getenv('AVATAR_GRAVATAR_DEFAULT', 'mm')
+AVATAR_GRAVATAR_DEFAULT = config('AVATAR_GRAVATAR_DEFAULT', default='mm')
+
+# Archive.org
+S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='')
+S3_SECRET_KEY = config('S3_SECRET_KEY', default='')
+ARCHIVE_COLLECTION = config('ARCHIVE_COLLECTION', default='test_collection')
+ARCHIVE_URL = 'https://archive.org/download/'
+
+if ENVIRONMENT == 'dev':
+    # Disable template caching
+    for backend in TEMPLATES:
+        del backend['OPTIONS']['loaders']
+        backend['APP_DIRS'] = True

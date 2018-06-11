@@ -10,18 +10,12 @@
 
       <h3>Fetch Data</h3>
 
-      {% if fetch_data %}
-        <p>Successfully fetch data from DB.</p>
-        <p><a href="#" id="fetch_log">Show log</a></p>
-        <code class="log">{{ fetch_data|linebreaks }}</code>
-      {% else %}
-        <p>You can update all Satellites and Transmitters data from DB.</p>
+      <p>You can update all Satellites and Transmitters data from DB.</p>
 
-        <form id="fetchform" method="post" class="form-horizontal" role="form" action="{% url 'base:settings_site' %}">{% csrf_token %}
-          <input type="hidden" name="fetch" value="true">
-          <button class="btn btn-primary" type="submit">Fetch</button>
-        </form>
-      {% endif %}
+      <form id="fetchform" method="post" class="form-horizontal" role="form" action="{% url 'base:settings_site' %}">{% csrf_token %}
+        <input type="hidden" name="fetch" value="true">
+        <button class="btn btn-primary" type="submit">Fetch</button>
+      </form>
 
     </div>
   </div>

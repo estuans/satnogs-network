@@ -10,6 +10,7 @@ var lintPathsJS = [
 ];
 
 var lintPathsCSS = [
+    'network/static/css/*.scss',
     'network/static/css/*.css'
 ];
 

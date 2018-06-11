@@ -21,7 +21,7 @@ class Command(BaseCommand):
             modes = urllib2.urlopen(modes_url).read()
             satellites = urllib2.urlopen(satellites_url).read()
             transmitters = urllib2.urlopen(transmitters_url).read()
-        except:
+        except urllib2.URLError:
             raise CommandError('API is unreachable')
 
         # Fetch Modes

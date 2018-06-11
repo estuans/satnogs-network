@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load tags %}
+{% load staticfiles %}
+
+{% block title %}{% if station %} - Edit Ground Station {{ station.name }}{% else %} - Add Ground Station{% endif %}{% endblock %}
+
+{% block content %}
+  <div class="row">
+    <div class="col-md-6">
+      <h2>
+        {% if station %}
+          Edit: {{ station.id }} - {{ station.name }}
+        {% else %}
+          Add Ground Station
+        {% endif %}
+      </h2>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-8">
+      <form role="form" enctype="multipart/form-data" method="post">{% csrf_token %}
+        <div class="form-group">
+          <label for="name" class="control-label">Name</label>
+          <input value="{{ form.name.value|default_if_none:"" }}" id="name" type="text" class="form-control" name="name" required>
+        </div>
+        <div class="form-group">
+          <label for="image" class="control-label">Image</label>
+          <input id="image" type="file" name="image">
+          {% if form.image.value %}
+            <img src="{{ MEDIA_URL }}{{ form.image.value }}"
+                 class="station-edit-image">
+          {% endif %}
+        </div>
+        <div class="form-group">
+          <label for="alt" class="control-label">Altitude</label>
+          <input value="{{ form.alt.value|default_if_none:"" }}" id="alt" type="number" class="form-control" name="alt" placeholder="{{ form.alt.help_text }}" required>
+        </div>
+        <div class="form-group">
+          <label for="lat" class="control-label">Latitude</label>
+          <input value="{{ form.lat.value|default_if_none:"" }}" id="lat" type="text" class="form-control" name="lat" placeholder="{{ form.lat.help_text }}" required>
+        </div>
+        <div class="form-group">
+          <label for="lng" class="control-label">Longtitude</label>
+          <input value="{{ form.lng.value|default_if_none:"" }}" id="lng" type="text" class="form-control" name="lng" placeholder="{{ form.lng.help_text }}" required>
+        </div>
+        <div class="form-group">
+          <label for="qthlocator" class="control-label">QTH Locator</label>
+          <input class="form-control"
+                 id="qthlocator"
+                 type="text"
+                 name="qthlocator"
+                 value="{{ form.qthlocator.value|default_if_none:"" }}"
+                 readonly>
+        </div>
+        <div class="form-group">
+          <label for="horizon" class="control-label">Minimum Horizon</label>
+          <input value="{{ form.horizon.value|default_if_none:"" }}" id="horizon" type="number" class="form-control" name="horizon" placeholder="{{ form.horizon.help_text }}">
+        </div>
+        <div class="form-group">
+          <label for="antennas" class="control-label">Antennas</label>
+          <select multiple class="form-control" name="antenna">
+            {% for antenna in antennas %}
+              <option value="{{ antenna.id }}" {% if antenna in station.antenna.all %}selected{% endif %}>
+                {{ antenna.band}} {{ antenna.get_antenna_type_display }} | {{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}
+              </option>
+            {% endfor %}
+          </select>
+          <span class="help-block">{{ form.antenna.help_text|safe }}</span>
+        </div>
+        {% if rigs %}
+          <div class="form-group">
+            <label for="rig" class="control-label">Rig</label>
+            <select class="form-control" name="rig">
+              <option value="" selected>---</option>
+              {% for rig in rigs %}
+                <option value="{{ rig.id }}" {% ifequal station.rig rig %}selected{% endifequal %}>
+                  {{ rig }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+        {% endif %}
+        <div class="form-group">
+          <label for="description" class="control-label">Description</label>
+          <textarea class="form-control" name="description"
+                    id="description" rows="3" maxlength="500">{{ form.description.value|default_if_none:"" }}</textarea>
+        </div>
+        <div class="form-group">
+          <div class="checkbox">
+            <label>
+              <input type="checkbox" name="testing" {% if form.testing.value %}checked="True"{% endif %} {% if not station.id %}disabled{% endif %}>
+              Testing?
+                  <span class="glyphicon glyphicon-question-sign" aria-hidden="true" data-toggle="tooltip"
+                        title="Make sure you Station is performing well for a period of time before you lift the Testing flag"></span>
+            </label>
+          </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Submit</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}
+
+{% block javascript %}
+  <script src="{% static 'js/gridsquare.js' %}"></script>
+{% endblock javascript %}

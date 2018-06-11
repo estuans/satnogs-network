@@ -24,8 +24,8 @@ class AntennaAdmin(admin.ModelAdmin):
 @admin.register(Station)
 class StationAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner', 'lng', 'lat', 'qthlocator',
-                    'created_date', 'active', 'state')
-    list_filter = ('active', 'created')
+                    'created_date', 'state')
+    list_filter = ('status', 'created')
 
     def created_date(self, obj):
         return obj.created.strftime('%d.%m.%Y, %H:%M')

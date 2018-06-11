@@ -12,12 +12,21 @@
 {% block content %}
 
   <div class="row">
-    <div class="col-md-12">
+    <div class="col-md-6 col-sm-6">
       <h2>New Observation</h2>
       <div class="timezone text-muted">
         <span class="glyphicon glyphicon-time" aria-hidden="true"></span>
         Timeframes are in <a href="#" data-toggle="modal" data-target="#UTCModal">UTC</a>
       </div>
+    </div>
+    <div class="col-md-6 col-sm-6 text-right hidden-xs">
+      <h2>
+        {% if user.is_authenticated %}
+          <a href="#" class="btn" data-toggle="modal" data-target="#HotkeysModal">
+            <span class="glyphicon glyphicon-fire" aria-hidden="true" title="Hotkeys"></span>
+          </a>
+        {% endif %}
+      </h2>
     </div>
   </div>
 
@@ -56,7 +65,7 @@
               <option id="no-transmitter" value="" disabled selected>No transmitter available</option>
               {% for transmitter in transmitters %}
                 <option data-satellite="{{ transmitter.satellite.norad_cat_id }}"
-                        value="{{ transmitter.id }}" >
+                        value="{{ transmitter.uuid }}" >
                   {{ transmitter.description }} - {{ transmitter.downlink_low|frq }} - {{ transmitter.mode|default:"" }}
                 </option>
               {% endfor %}
@@ -156,6 +165,9 @@
 
   <!-- UTC Modal -->
   {% include 'includes/utc.html' %}
+
+  <!-- Hotkeys Modal -->
+  {% include 'includes/observation-new-hotkeys.html' %}
 
 {% endblock content %}
 

@@ -4,13 +4,21 @@
 
 {% block title %} - Ground Stations{% endblock %}
 
+{% block css %}
+  <link rel="stylesheet" href="{% static 'lib/mapbox-gl/dist/mapbox-gl.css' %}">
+{% endblock css %}
+
 {% block content %}
-  <h1>
+  <h2>
     Ground Stations
-    {% if user.is_authenticated %}
-      <button class="btn btn-primary pull-right" data-toggle="modal" data-target="#StationModal">New Ground Station</button>
-    {% endif %}
-  </h1>
+    <button type="button" class="btn btn-sm btn-default map-modal-reveal" data-toggle="modal" data-target="#MapModal">
+      <span class="glyphicon glyphicon-map-marker" aria-hidden="true"></span>
+    </button>
+    <div class="stations-totals">
+      <span class="label label-online">{{ online }}</span> online
+      <span class="label label-testing">{{ testing }}</span> testing
+    </div>
+  </h2>
 
   <div class="row">
     <div class="col-md-12">
@@ -19,29 +27,30 @@
           <th>ID</th>
           <th>Name</th>
           <th>Location</th>
-          <th>Altitude</th>
+          <th>Total</th>
+          <th>Future</th>
           <th>Antennas</th>
           <th>Owner</th>
         </thead>
         <tbody>
           {% for station in stations.all %}
-            <tr>
+            <tr class="clickable-row" data-href="{% url 'base:station_view' id=station.id %}">
               <td>
                 <a href="{% url 'base:station_view' id=station.id %}">
-                  <span class="label
-                               {% if station.online %}
-                                 label-success
+                  <span class="label label-{{ station.get_status_display|lower }}"
+                        data-toggle="tooltip"
+                        data-placement="bottom"
+                        title="{% if station.last_seen %}
+                                 Seen {{ station.last_seen|timesince }} ago
                                {% else %}
-                                 label-danger
+                                 Never seen
                                {% endif %}">
                     {{ station.id }}
                   </span>
                 </a>
               </td>
               <td>
-                <a href="{% url 'base:station_view' id=station.id %}">
-                  {{ station.name }}
-                </a>
+                {{ station.name }}
               </td>
               {% if station.location %}
                 <td title="{{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°, {{ station.qthlocator }}">
@@ -49,16 +58,37 @@
                 </td>
               {% else %}
                 <td>
-                  {{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°
                   {% if station.qthlocator %}
-                    - {{ station.qthlocator }}
+                    <span data-toggle="tooltip" data-placement="bottom"
+                          title="{{ station.lat|floatformat:-3 }}°, {{ station.lng|floatformat:-3 }}°">
+                    {{ station.qthlocator }}
+                  {% else %}
+                    {{ station.lat|floatformat:-1 }}°, {{ station.lng|floatformat:-1 }}°
                   {% endif %}
+                  @{{ station.alt}}m
                 </td>
               {% endif %}
-              <td>{{ station.alt}} m</td>
               <td>
+                <a href="{% url 'base:observations_list' %}?station={{ station.id }}">
+                  <span class="badge total-pill" data-toggle="tooltip" data-placement="bottom"
+                        title="{{ station.success_rate }}% Success">
+                    {{ station.total_obs }}
+                  </span>
+                </a>
+              </td>
+              <td>
+                <a href="{% url 'base:observations_list' %}?future=1&good=0&bad=0&unvetted=0&failed=0&station={{ station.id }}">
+                  <span class="badge badge-info">
+                    {{ station.observations_future_count }}
+                  </span>
+                </a>
+              </td>
+              <td class="station-antennas">
                 {% for antenna in station.antenna.all %}
-                  {{ antenna.band}} {{ antenna.get_antenna_type_display }} | {{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}<br>
+                  <span class="antenna-pill" data-toggle="tooltip" data-placement="bottom"
+                        title="{{ antenna.frequency|frq }} - {{ antenna.frequency_max|frq }}">
+                    {{ antenna.band}} {{ antenna.get_antenna_type_display }}
+                  </span>
                 {% endfor %}
               </td>
               <td>
@@ -73,10 +103,27 @@
     </div>
   </div>
 
-  <!-- Station Modal -->
-  {% include 'includes/station_edit.html' %}
+  <!-- Modal -->
+  <div class="modal fade map-modal" id="MapModal" tabindex="-1" role="dialog" aria-labelledby="MapModal">
+    <div class="modal-dialog modal-lg" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+          <h4 class="modal-title" id="myModalLabel">Stations Map</h4>
+        </div>
+        <div class="modal-body">
+          <div id="map" data-mapboxid="{{ mapbox_id }}" data-mapboxtoken="{{ mapbox_token }}" data-stations="{% url 'base:stations_all' %}"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock content %}
 
+
 {% block javascript %}
-  <script src="{% static 'js/gridsquare.js' %}"></script>
-{% endblock javascript %}
+  <script src="{% static 'lib/mapbox-gl/dist/mapbox-gl.js' %}"></script>
+  <script src="{% static 'js/map.js' %}"></script>
+{% endblock %}

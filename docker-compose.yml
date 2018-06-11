@@ -1,18 +1,24 @@
-version: '3'
+version: '3.1'
 services:
+
   db:
     image: mariadb:5.5
+    container_name: satnogs_network_mysql
     environment:
     - MYSQL_DATABASE=network
     - MYSQL_USER=network
     - MYSQL_PASSWORD=network
     - MYSQL_ROOT_PASSWORD=toor
+
   redis:
-    image: redis:3.2.8
+    image: redis:3.2.10
+    container_name: satnogs_network_redis
+
   celery:
     build:
       context: .
       dockerfile: docker/dev
+    container_name: satnogs_network_celery
     volumes:
       - .:/app
     links:
@@ -20,12 +26,16 @@ services:
       - redis
     environment:
       - DATABASE_URL=mysql://network:network@db/network
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
     command:
       ./bin/run-celery.sh
+
   web:
     build:
       context: .
       dockerfile: docker/dev
+    container_name: satnogs_network_web
     ports:
       - "8000:8000"
     volumes:
@@ -33,7 +43,6 @@ services:
     links:
       - db
       - redis
-      - celery
     environment:
       - DATABASE_URL=mysql://network:network@db/network
     command:

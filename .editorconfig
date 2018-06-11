@@ -20,6 +20,6 @@ indent_size = 2
 indent_style = space
 indent_size = 2
 
-[*.{css,js}]
+[*.{scss,css,js}]
 indent_style = space
 indent_size = 4
