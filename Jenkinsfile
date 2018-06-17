@@ -6,7 +6,7 @@ pipeline {
         sh '''#!/bin/bash
 #Activate venv
 source /opt/venv/jenkins-gs/bin/activate
-pip install ./requirements/dev.txt'''
+pip install -r ./requirements/dev.txt'''
       }
     }
   }
